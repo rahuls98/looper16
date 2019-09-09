@@ -1,0 +1,129 @@
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>Music Sequencer</title>
+        <link rel="stylesheet" href="CSS/style.css">
+        <script type="text/javascript" src="scripts/nexusUI.js"></script>
+    </head>
+    <body>
+        <div class="grid">
+            <h2>GRID SEQUENCERS</h2>
+        </div>
+        <aside>
+            <h2>CONTROLLERS</h2>
+        </aside>
+        <script>
+            Nexus.colors.accent = "#e33d48"
+            Nexus.colors.fill = "#333"    
+        </script>
+        <div class="grid" id="drum-seq">
+            <script>
+                var sequencer = new Nexus.Sequencer('#drum-seq',{
+                    'size': [850,150],
+                    'mode': 'toggle',
+                    'rows': 3,
+                    'columns': 16
+                })
+            </script> 
+        </div>
+        <aside id="vol1">
+            <script>
+                var multislider = new Nexus.Multislider('#vol1',{
+                    'size': [200,150],
+                    'numberOfSliders': 3,
+                    'min': 0,
+                    'max': 1,
+                    'step': 0,
+                    'candycane': 3,
+                    'values': [0.7, 0.3, 0.5],
+                    'smoothing': 0,
+                    'mode': 'bar'  // 'bar' or 'line'
+                }) 
+            </script> 
+        </aside>
+        <br>
+        <div class="grid" id="piano-seq">
+            <script>
+                var sequencer = new Nexus.Sequencer('#piano-seq',{
+                    'size': [850,250],
+                    'mode': 'toggle',
+                    'rows': 13,
+                    'columns': 16
+                })
+            </script> 
+        </div>
+        <aside id="vol2">
+            <h3>KEYS VOL</h3>
+            <script>
+                var dial = new Nexus.Dial('#vol2',{
+                    'size': [150,150],
+                    'interaction': 'radial', // "radial", "vertical", or "horizontal"
+                    'mode': 'relative', // "absolute" or "relative"
+                    'min': 0,
+                    'max': 1,
+                    'step': 0,
+                    'value': 0.25
+                })
+            </script>
+        </aside>
+        <aside id="vol3">
+            <h3>BASS VOL</h3>
+            <script>
+                var dial = new Nexus.Dial('#vol3',{
+                    'size': [150,150],
+                    'interaction': 'radial', // "radial", "vertical", or "horizontal"
+                    'mode': 'relative', // "absolute" or "relative"
+                    'min': 0,
+                    'max': 1,
+                    'step': 0,
+                    'value': 0.25
+                })
+            </script>
+        </aside>
+        <br>
+        <div class="grid" id="bass-seq">
+            <script>
+                var sequencer = new Nexus.Sequencer('#bass-seq',{
+                    'size': [850,250],
+                    'mode': 'toggle',
+                    'rows': 13,
+                    'columns': 16
+                })
+            </script> 
+        </div>
+        <aside id="play-button">
+            <script>
+                var button = new Nexus.Button('#play-button',{
+                    'size': [80,80],
+                    'mode': 'aftertouch',
+                    'state': false
+                })
+            </script>
+            <h3>PLAY</h3>
+        </aside>
+        <aside id="stop-button">
+            <script>
+                var button = new Nexus.Button('#stop-button',{
+                    'size': [80,80],
+                    'mode': 'aftertouch',
+                    'state': false
+                })
+            </script>
+            <h3>STOP</h3>
+        </aside>
+        <aside id="tempo">
+            <script>
+                var number = new Nexus.Number('#tempo',{
+                    'size': [60,30],
+                    'value': 80,
+                    'min': 0,
+                    'max': 20000,
+                    'step': 1
+                })
+                number.colorize("fill","#e33d48")
+            </script>
+            <h3>TEMPO</h3>
+        </aside>
+        <br>
+    </body>
+</html> 

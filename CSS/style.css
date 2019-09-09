@@ -1,0 +1,42 @@
+body {
+    background: linear-gradient(black, #0d0226) ;
+    font-family: "open sans";
+}
+
+div {
+    width: 850px;
+    padding: 10px;
+    float: left;
+}
+
+#tempo {
+    padding-top: 58px; 
+}
+
+aside {
+    width:20%;
+    float: left;
+    padding: 10px;
+    padding-left: 50px;
+}
+
+.grid {
+    border-right: white solid 2px;
+    padding-right: 20px;
+}
+
+h2 {
+    color: #e33d48;
+    width: 250px;
+    margin-block-start: 0px;
+    margin-block-end: 0px;
+    margin-inline-start: 0px;
+    margin-inline-end: 0px;
+}
+
+h3 {
+    color: #e33d48;
+    text-align: center;
+}
+
+
