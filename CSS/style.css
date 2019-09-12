@@ -3,26 +3,60 @@ body {
     font-family: "open sans";
 }
 
-div {
-    width: 850px;
-    padding: 10px;
+.midi {
+    width: 4%;
     float: left;
+    padding-top: 213px;
 }
 
-#tempo {
-    padding-top: 58px; 
+.keyboard {
+    border-spacing: 1.5px;
 }
 
-aside {
-    width:20%;
-    float: left;
-    padding: 10px;
-    padding-left: 50px;
+.keyboard tr td {
+    height: 18;
+    padding: 0px;
+    font-size: 10px;
+    font-style: normal;
+    color: black;
+    border: black solid 0.4px;
+    border-top-right-radius: 4px;
+    border-bottom-right-radius: 4px;
+    text-align: center;
+}
+
+#key2 {
+    padding-top: 12px;
+}
+
+.norm {
+    background-color: #e33d48;
+}
+
+.flat {
+    background-color: rgb(145, 143, 143);
 }
 
 .grid {
+    width: 850px;
     border-right: white solid 2px;
+    padding-left: 10px;
     padding-right: 20px;
+    float: left;
+}
+
+.seq {
+    padding-bottom: 10px;
+}
+
+#tempo {
+    padding-top: 20px; 
+}
+
+aside {
+    float: left;
+    padding: 10px;
+    padding-left: 30px;
 }
 
 h2 {
@@ -30,8 +64,7 @@ h2 {
     width: 250px;
     margin-block-start: 0px;
     margin-block-end: 0px;
-    margin-inline-start: 0px;
-    margin-inline-end: 0px;
+    padding-top: 20px;
 }
 
 h3 {
@@ -39,4 +72,29 @@ h3 {
     text-align: center;
 }
 
+td {
+    color: #e33d48;
+    padding: 0px;
+    width: 51.125;
+    font-weight: bold;
+    font-size: 25px;
+    padding-top: 20px;
+}
 
+.row1 {
+    padding-top: 43px;
+}
+
+.row2 {
+    padding-top: 20px;
+}
+
+.row3 {
+    padding-top: 270px;
+}
+
+.col {
+    width: 20%;
+    float: left;
+    padding-right: 40px;
+}

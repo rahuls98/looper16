@@ -16,7 +16,7 @@ var drum_vol = new Nexus.Multislider('#drum-vol',{
     'min': 0,
     'max': 1,
     'step': 0,
-    'candycane': 3,
+    'candycane': 4,
     'values': [0.7, 0.3, 0.5],
     'smoothing': 0,
     'mode': 'bar'  // 'bar' or 'line'
@@ -82,4 +82,4 @@ var tempo = new Nexus.Number('#tempo',{
     'max': 20000,
     'step': 1
 });
-tempo.colorize("fill","#e33d48");
+tempo.colorize("fill","white");

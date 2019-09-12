@@ -7,29 +7,96 @@
     </head>
     <body>
         <!--  **LAYOUT**  -->
-        <!--GRID SEQ HEADING-->
-        <div class="grid"><h2>GRID SEQUENCERS</h2></div>
-        <!--CONTROLLERS HEADING-->
-        <aside><h2>CONTROLLERS</h2></aside>
-        <!--DRUM GRID-->
-        <div class="grid" id="drum-seq"></div>
-        <!--DRUM VOLUME-->
-        <aside id="drum-vol"></aside>
-        <!--PIANO GRID-->
-        <div class="grid" id="piano-seq"></div>
-        <!--PIANO VOLUME-->
-        <aside id="piano-vol"><h3>KEYS VOL</h3></aside>
-        <!--BASS VOLUME-->
-        <aside id="bass-vol"><h3>BASS VOL</h3></aside>
-        <!--BASS GRID-->
-        <div class="grid" id="bass-seq"></div>
-        <!--PLAY BUTTON-->
-        <aside id="play-button"><h3>PLAY</h3></aside>
-        <!--STOP BUTTON-->
-        <aside id="stop-button"><h3>STOP</h3></aside>
-        <!--TEMPO BOX-->
-        <aside id="tempo"><h3>TEMPO</h3></aside>
 
+        <div class="midi">
+            <p>test</p>
+            <table class="keyboard" id="key1">
+                <tr><td class="norm">C</td></tr>
+                <tr><td class="norm">B</td></tr>
+                <tr><td class="flat">Bb</td></tr>
+                <tr><td class="norm">A</td></tr>
+                <tr><td class="flat">Ab</td></tr>
+                <tr><td class="norm">G</td></tr>
+                <tr><td class="flat">Gb</td></tr>
+                <tr><td class="norm">F</td></tr>
+                <tr><td class="norm">E</td></tr>
+                <tr><td class="flat">Eb</td></tr>
+                <tr><td class="norm">D</td></tr>
+                <tr><td class="flat">Db</td></tr>
+                <tr><td class="norm">C</td></tr>
+            </table>
+            <table class="keyboard" id="key2">
+                    <tr><td class="norm">C</td></tr>
+                    <tr><td class="norm">B</td></tr>
+                    <tr><td class="flat">Bb</td></tr>
+                    <tr><td class="norm">A</td></tr>
+                    <tr><td class="flat">Ab</td></tr>
+                    <tr><td class="norm">G</td></tr>
+                    <tr><td class="flat">Gb</td></tr>
+                    <tr><td class="norm">F</td></tr>
+                    <tr><td class="norm">E</td></tr>
+                    <tr><td class="flat">Eb</td></tr>
+                    <tr><td class="norm">D</td></tr>
+                    <tr><td class="flat">Db</td></tr>
+                    <tr><td class="norm">C</td></tr>
+                </table>
+        </div>
+        
+        <div class="grid">
+            <!--GRID SEQ HEADING-->
+            <div><h2>GRID SEQUENCERS</h2></div>
+            <!--BEATS-->
+            <div>
+                <table>
+                    <tr>
+                        <td>|</td>
+                        <td>.</td>
+                        <td>.</td>
+                        <td>.</td>
+                        <td>|</td>
+                        <td>.</td>
+                        <td>.</td>
+                        <td>.</td>
+                        <td>|</td>
+                        <td>.</td>
+                        <td>.</td>
+                        <td>.</td>
+                        <td>|</td>
+                        <td>.</td>
+                        <td>.</td>
+                        <td>.</td>
+                    </tr>
+                </table>
+            </div>
+            <!--DRUM GRID-->
+            <div class="seq" id="drum-seq"></div>
+            <!--PIANO GRID-->
+            <div class="seq" id="piano-seq"></div>
+            <!--BASS GRID-->
+            <div class="seq" id="bass-seq"></div>
+        </div>
+        <aside>
+            <!--CONTROLLERS HEADING-->
+            <div><h2>CONTROLLERS</h2></div>
+            <!--DRUM VOLUME-->
+            <div class="row1" id="drum-vol"></div>
+            <div class="row2">
+                <!--PIANO VOLUME-->
+                <div class="col" id="piano-vol"><h3>KEYS VOL</h3></div>
+                <!--BASS VOLUME-->
+                <div class="col" id="bass-vol"><h3>BASS VOL</h3></div>
+            </div>
+            
+            <div class="row3">
+                <!--PLAY BUTTON-->
+                <div class="col" id="play-button"><h3>PLAY</h3></div>
+                <!--STOP BUTTON-->
+                <div class="col" id="stop-button"><h3>STOP</h3></div>
+                <!--TEMPO BOX-->
+                <div class="col" id="tempo"><h3>TEMPO</h3></div>
+            </div>
+        </aside>
+        
         <script type="text/javascript" src="scripts/interface.js"></script>
     </body>
 </html> 
