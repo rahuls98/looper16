@@ -1,9359 +1,9690 @@
-(function webpackUniversalModuleDefinition(root, factory) {
-	if(typeof exports === 'object' && typeof module === 'object')
-		module.exports = factory();
-	else if(typeof define === 'function' && define.amd)
-		define([], factory);
-	else if(typeof exports === 'object')
-		exports["Nexus"] = factory();
-	else
-		root["Nexus"] = factory();
-})(this, function() {
-return /******/ (function(modules) { // webpackBootstrap
-/******/ 	// The module cache
-/******/ 	var installedModules = {};
-/******/
-/******/ 	// The require function
-/******/ 	function __webpack_require__(moduleId) {
-/******/
-/******/ 		// Check if module is in cache
-/******/ 		if(installedModules[moduleId])
-/******/ 			return installedModules[moduleId].exports;
-/******/
-/******/ 		// Create a new module (and put it into the cache)
-/******/ 		var module = installedModules[moduleId] = {
-/******/ 			exports: {},
-/******/ 			id: moduleId,
-/******/ 			loaded: false
-/******/ 		};
-/******/
-/******/ 		// Execute the module function
-/******/ 		modules[moduleId].call(module.exports, module, module.exports, __webpack_require__);
-/******/
-/******/ 		// Flag the module as loaded
-/******/ 		module.loaded = true;
-/******/
-/******/ 		// Return the exports of the module
-/******/ 		return module.exports;
-/******/ 	}
-/******/
-/******/
-/******/ 	// expose the modules object (__webpack_modules__)
-/******/ 	__webpack_require__.m = modules;
-/******/
-/******/ 	// expose the module cache
-/******/ 	__webpack_require__.c = installedModules;
-/******/
-/******/ 	// __webpack_public_path__
-/******/ 	__webpack_require__.p = "";
-/******/
-/******/ 	// Load entry module and return exports
-/******/ 	return __webpack_require__(0);
-/******/ })
-/************************************************************************/
-/******/ ([
-/* 0 */
-/***/ (function(module, exports, __webpack_require__) {
+(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+var manager = require('./lib/core/manager');
+var domUtils = require('./lib/utils/dom');
+var drawingUtils = require('./lib/utils/drawing');
+var mathUtils = require('./lib/utils/math');
+var extend = require('extend');
+var WebFont = require('webfontloader');
 
-	"use strict";
-	
-	var _interopRequire = function (obj) { return obj && obj.__esModule ? obj["default"] : obj; };
-	
-	var NexusUI = _interopRequire(__webpack_require__(1));
-	
-	module.exports = NexusUI;
+/************************************************
+*  INSTANTIATE NX MANAGER AND CREATE ELEMENTS   *
+************************************************/
 
-/***/ }),
-/* 1 */
-/***/ (function(module, exports, __webpack_require__) {
+window.nx = new manager();
+window.nx.onload = function() {};
+window.nx = extend(window.nx,domUtils)
+window.nx = extend(window.nx,drawingUtils)
+window.nx = extend(window.nx,mathUtils)
 
-	"use strict";
+/* this onload function turns canvases into nexus elements,
+ * using the canvas's id as its var name */
+
+window.onload = function() {
+  try {
+    WebFont.load({
+      google: {
+        families: ['Open Sans']
+      }
+    });
+  } catch(e) {
+    console.log("font not loaded")
+  }
+
+  nx.addStylesheet();
+
+  // get all canvases on the page and add them to the manager
+  var allcanvi = document.getElementsByTagName("canvas");
+  for (i=0;i<allcanvi.length;i++) nx.transform(allcanvi[i]);
+
+  if (nx.isTouchDevice) {
+    document.addEventListener("touchmove", nx.blockMove, true);
+    document.addEventListener("touchstart", nx.blockMove, true);
+  }
+  
+  nx.onload();
+
+  nx.startPulse();
+  
+};
+},{"./lib/core/manager":2,"./lib/utils/dom":4,"./lib/utils/drawing":5,"./lib/utils/math":6,"extend":52,"webfontloader":53}],2:[function(require,module,exports){
+
+/** 
+  @title NexusUI API
+  @overview NexusUI is a JavaScript toolkit for easily creating musical interfaces in web browsers. Interfaces are rendered on HTML5 canvases and are ideal for web audio projects, mobile apps, or for sending OSC to external audio applications like Max.
+  @author Ben Taylor, Jesse Allison, Yemin Oh, Sébastien Piquemal
+  @copyright &copy; 2011-2014
+  @license MIT
+ */ 
+ 
+
+var timingUtils = require('../utils/timing');
+var drawingUtils = require('../utils/drawing');
+var EventEmitter = require('events').EventEmitter;
+var util = require('util');
+var transmit = require('../utils/transmit');
+//var WAAClock = require('waaclock');
+
+
+var manager = module.exports = function() {
+
+/** 
+
+  @class nx
+  @description Central nexusUI manager with shared utility functions for all nexusUI objects
+  
+*/
+
+  EventEmitter.apply(this)
+
+  /**@property {object} widgets Contains all interface widgets (e.g. nx.widgets.dial1, nx.widgets.toggle1) */
+  this.widgets = new Object();
+
+  this.elemTypeArr = new Array();
+  this.aniItems = new Array();
+  /*  @property {boolean} showLabels Whether or not to draw an automatic text label on each interface component. */
+  this.showLabels = false;
+  this.starttime = new Date().getTime();
+  if (transmit) {
+    /**  
+    @method sendsTo 
+    @param {string or function} [destination] Protocol for transmitting data from interfaces (i.e. "js", "ajax", "ios", "max", or "node"). Also accepts custom functions.
+    ```js
+    nx.sendsTo("ajax")
+
+    // or
+
+    nx.sendsTo(function(data) {
+         //define a custom transmission function
+    })
+    ```
+    */
+    this.sendsTo = transmit.setGlobalTransmit;
+    /**  
+    @method setAjaxPath 
+    @param {string} [path] If sending via AJAX, define the path to ajax destination
+    */
+    this.setAjaxPath = transmit.setAjaxPath;
+    /**  @property {string} destination NexusUI's transmission protocol (i.e. "js" or "ajax"). Defaults to "js". We recommend setting this property using nx.sendsTo() which ensures that all widgets receive this setting. */
+    this.destination = "js";
+    /**  @property {string} ajaxPath If sending via AJAX, the destination path. Defaults to "lib/nexusOSCRelay.php". We recommend setting this property using nx.setAjaxPath() which ensures that all widgets receive this setting. */
+    this.ajaxPath = "lib/nexusOSCRelay.php";
+  }
+
+  /** @property {boolean} isTouchDevice Returns true if page is loaded on a touch device. */
+  this.isTouchDevice = ('ontouchstart' in document.documentElement)? true:false;
+  this.metas = document.getElementsByTagName('meta');
+
+  /**  @property {boolean} globalWidgets Whether or not to instantiate a global variable for each widget (i.e. button1). Defaults to true. Designers of other softwares who wish to keep nexusUI entirely encapsulated in the nx object may set this property to false. In that case, all widgets are accessible in nx.widgets */
+  this.globalWidgets = true;
+
+  this.font = "'open sans'";
+  this.fontSize = 14;
+  this.fontWeight = "normal";
+
+  this.context = new(window.AudioContext || window.webkitAudioContext)()
+ 
+  this.sys = navigator.userAgent.toLowerCase();
+  this.isAndroid = this.sys.indexOf("android") > -1;
+  this.isMobile = this.sys.indexOf("mobile") > -1;
+
+  /**  @property {integer} throttlePeriod Throttle time in ms (for nx.throttle). */
+  this.throttlePeriod = 20;
+
+
+  /* extra colors */
+
+  this.colors.borderhl = drawingUtils.shadeBlendConvert(-0.5,this.colors.border); // colors.border + [20% Darker] => colors.darkborder 
+  this.colors.accenthl = drawingUtils.shadeBlendConvert(0.15,this.colors.accent);    
+
+}
+
+util.inherits(manager, EventEmitter)
+
+
+/** 
+  @method add 
+  Adds a NexusUI element to the webpage. This will create an HTML5 canvas and draw the interface on it.
+  @param {string} [type] NexusUI widget type (i.e. "dial").
+  @param {object} [settings] (Optional.) Extra settings for the new widget. This settings object may have any of the following properties: x (integer in px), y, w (width), h (height), name (widget's OSC name and canvas ID), parent (the ID of the element you wish to add the canvas into). If no settings are provided, the element will be at default size and appended to the body of the HTML document.
+  */
+manager.prototype.add = function(type, args) {
+  //args may have optional properties: x, y, w, h, name, parent
+
+  if(type) {
+      var canv = document.createElement("canvas");
+      canv.setAttribute('nx', type);
+      if (args) {
+        if (args.x || args.y) {
+           canv.style.position = "absolute";
+        }
+        if (args.x) {
+           canv.style.left = args.x + "px";
+        }
+        if (args.y) {
+           canv.style.top = args.y + "px";
+        }
+        if (args.w) {
+           canv.style.width = args.w;
+           if (typeof args.w != "string")
+             canv.width = args.w;
+        }
+        if (args.h) {
+           canv.style.height = args.h;
+           if (typeof args.h != "string")
+             canv.height = args.h;
+        }
+        if (args.parent) {
+          var parent;
+          if (typeof args.parent === "string") {
+            parent = document.getElementById(args.parent);
+          } else if (args.parent instanceof HTMLElement){
+            parent = args.parent;
+          } else if (args.parent instanceof jQuery){
+            parent = args.parent[0];            
+          }
+        }
+        if (args.name) {
+           canv.id = args.name
+        }
+      }
+      if (!parent) {
+        var parent = document.body
+      }
+      parent.appendChild(canv);
+      return this.transform(canv);
+  }
+}
+
+/** @method transform 
+Transform an existing canvas into a NexusUI widget.
+@param {string} [canvasID] The ID of the canvas to be transformed.
+@param {string} [type] (Optional.) Specify which type of widget the canvas will become. If no type is given, the canvas must have an nx attribute with a valid widget type.
+*/
+manager.prototype.transform = function(canvas, type) {
+  for (var key in nx.widgets) {
+    if (nx.widgets[key].canvasID == canvas.id) {
+      return;
+    }
+  }
+  if (type) {
+    var nxType = type;
+  } else {
+    var nxType = canvas.getAttribute("nx");
+  }
+
+  if (!nxType) {
+    return;
+  }
+  var elemCount = 0;
+  var newObj;
+
+  /* find out how many of the same elem type have come before
+    i.e. nx.elemTypeArr will look like [ dial, dial, toggle, toggle ]
+    allowing you to count how many dials already exist on the page
+    and give your new dial the appropriate index and id: dial3 */
+
+  for (j=0;j<this.elemTypeArr.length;j++) {
+    if (this.elemTypeArr[j] === nxType) {
+      elemCount++;
+    }
+  }
+
+  // add your new nexus element type to the element list
+  this.elemTypeArr.push(nxType);
+
+  // check to see if it has a pre-given ID
+  // and use that as its id if so
+  if (!canvas.id) {
+    var idNum = elemCount + 1;
+    canvas.id = nxType + idNum;
+  }
+
+  if(nxType) {
+    try {
+      var newObj = new (require('../widgets')[nxType])(canvas.id);
+    } catch (err) {
+      console.log("creation of " + nxType + " failed");
+      return;
+    }
+  }
+
+  newObj.type = nxType;
+
+  this.widgets[newObj.canvasID] = newObj;
+  if (this.globalWidgets) {
+    window[newObj.canvasID] = this.widgets[newObj.canvasID]
+  }
+
+  newObj.init();
+  return newObj;
+}
+
+/** @method transmit 
+The "output" instructions for sending a widget's data to another application or to a JS callback. Inherited by each widget and executed when each widget is interacted with or its value changes. Set using nx.sendsTo() to ensure that all widgets inherit the new function correctly.
+@param {object} [data] The data to be transmitted. Each property of the object will become its own OSC message. (This works with objects nested to up to 2 levels).
+*/
+
+manager.prototype.transmit = function(data, passive) {
+  //console.log(passive + " manager.transmit")
+    this.makeOSC(this.emit, data, passive);
+    this.emit('*',data, passive);
+} 
+
+/** 
+  @method colorize
+  @param {string} [aspect] Which part of ui to change, i.e. "accent" "fill", "border"
+  @param {string} [color] Hex or rgb color code
+  Change the color of all nexus objects, by aspect ([fill, accent, border, accentborder]
+  
+  ```js
+  nx.colorize("#00ff00") // changes the accent color by default
+  nx.colorize("border", "#000000") // changes the border color
+  ```
+
+**/
+manager.prototype.colorize = function(aspect, newCol) {
+  
+  if (!newCol) {
+    // just sending in a color value colorizes the accent
+    newCol = aspect;
+    aspect = "accent";
+  }
+  
+  this.colors[aspect] = newCol;
+
+  this.colors.borderhl = drawingUtils.shadeBlendConvert(0.1,this.colors.border,this.colors.black); // colors.border + [20% Darker] => colors.darkborder 
+  this.colors.accenthl = drawingUtils.shadeBlendConvert(0.3,this.colors.accent);  
+  
+  for (var key in this.widgets) {
+    this.widgets[key].colors[aspect] = newCol;
+    this.widgets[key].colors["borderhl"] = this.colors.borderhl;
+    this.widgets[key].colors["accenthl"] = this.colors.accenthl;
+
+    this.widgets[key].draw();
+  }
+
+}
+  
+
+/** @method setThrottlePeriod 
+Set throttle time of nx.throttle, which controls rapid network transmissions of widget data.
+@param {integer} [throttle time] Throttle time in milliseconds. 
+*/
+manager.prototype.setThrottlePeriod = function(newThrottle) {
+  this.throttlePeriod = newThrottle;
+  for (var key in this.widgets) {
+    this.widgets[key].throttlePeriod = this.throttlePeriod;
+  }
+}
+
+
+
+  /*  
+   *    GUI
+   */
+
+/**  @property {object} colors The interface's color settings. Set with nx.colorize(). */
+manager.prototype.colors = { 
+  "accent": "#ff5500", 
+  "fill": "#eeeeee", 
+  "border": "#e3e3e3",
+  "mid": "#1af",
+  "black": "#000000",
+  "white": "#FFFFFF"
+};
+
+/**  @method startPulse 
+  Start an animation interval for animated widgets (calls nx.pulse() every 30 ms). Executed by default when NexusUI loads.
+*/
+manager.prototype.startPulse = function() {
+  this.pulseInt = setInterval("nx.pulse()", 30);
+}
+
+/**  @method stopPulse 
+  Stop the animation pulse interval.
+*/
+manager.prototype.stopPulse = function() {
+  clearInterval(this.pulseInt);
+}
+
+/**  @method pulse 
+  Animation pulse which executes all functions stored in the nx.aniItems array.
+*/
+manager.prototype.pulse = function() {
+  for (var i=0;i<this.aniItems.length;i++) {
+    this.aniItems[i]();
+  }
+} 
+
+manager.prototype.addAni = function(fn) {
+
+}
+
+manager.prototype.removeAni = function(fn) {
+  this.aniItems.splice(this.aniItems.indexOf(fn));
+}
+  
+manager.prototype.addStylesheet = function() {
+  var htmlstr = '<style>'
+    + 'select {'
+    + 'width: 150px;'
+    + 'padding: 5px 5px;'
+    + 'font-size: 16px;'
+    + 'color:#666666;'
+    + 'border: solid 2px #e4e4e4;'
+    + 'border-radius: 0;'
+    + '-webkit-appearance: none;'
+    //+ 'border: 0;'
+    + 'outline: none;'
+   // + 'cursor:pointer;'
+    + 'background-color:#EEE;'
+    + 'font-family:"open sans";'
+    + '}'
+    + ''
+    + 'input[type=text]::-moz-selection { background: transparent; }'
+    + 'input[type=text]::selection { background: transparent; }'   
+    + 'input[type=text]::-webkit-selection { background: transparent; }' 
+    + ''
+    + 'canvas { '
+   // + 'cursor:pointer;'
+    + 'border-radius:0px;'
+    + 'moz-border-radius:0px;'
+    + 'webkit-border-radius:0px;'
+    + 'box-sizing:border-box;'
+    + '-moz-box-sizing:border-box;'
+    + '-webkit-box-sizing:border-box;'
+    + '}'
+    + ''
+    + 'input[type=text] { '
+   // + 'cursor:pointer;'
+    + 'border-radius:5px;'
+    + 'moz-border-radius:5px;'
+    + 'webkit-border-radius:5px;'
+    + 'box-sizing:border-box;'
+    + '-moz-box-sizing:border-box;'
+    + '-webkit-box-sizing:border-box;'
+    + '}'
+    + '</style>';
+
+  document.head.innerHTML = document.head.innerHTML + htmlstr
+}
+
+/**  @method setViewport
+    Set mobile viewport scale (similar to a zoom)
+    @param {integer} [scale] Zoom ratio (i.e. 0.5, 1, 2) */
+manager.prototype.setViewport = function(scale) {
+  for (i=0; i<this.metas.length; i++) {
+    if (this.metas[i].name == "viewport") {
+      this.metas[i].content = "minimum-scale="+scale+", maximum-scale="+scale;
+    }
+  }
+}
+
+/*  @method setLabels
+    Tell all widgets whether or not draw text labels on widgets
+    @param {boolean} [on/off] true to add labels, false to remove labels
+ */
+manager.prototype.setLabels = function(onoff) {
+  if (onoff=="on") {
+    this.showLabels = true;
+  } else {
+    this.showLabels = false;
+  }
+  for (var key in this.widgets) {
+    this.widgets[key].draw()
+  }
+}
+
+manager.prototype.setProp = function(prop,val) {
+  if (prop && val) {
+    nx[prop] = val;
+    for (var key in this.widgets) {
+      this.widgets[key][prop] = val;
+      this.widgets[key].draw()
+    } 
+  }
+}
+
+manager.prototype.blockMove = function(e) {
+  if (e.target.attributes["nx"]) {
+     e.preventDefault();
+     if (this.isAndroid) {
+       e.stopPropagation ? e.stopPropagation() : false;
+     }
+  }
+}
+
+manager.prototype.calculateDigits = function(value) {
+  var nondecimals = this.max ? Math.floor(this.max).toString().length : 1
+  if (nondecimals < this.maxdigits) {
+    var decimals = 3-nondecimals
+  } else {
+    var decimals = 0
+  }
+  var valdigits = nondecimals + decimals
+  return {
+    wholes: nondecimals,
+    decimals: decimals,
+    total: nondecimals + decimals, 
+  }
+}
+
+manager.prototype.themes = {
+  "light": {
+    "fill": "#DDDDDD",
+    "border": "#DADADA",
+    "black": "#000000",
+    "white": "#FFFFFF",
+    "body": "#F3F3F3"
+  },
+  "dark": {
+    "fill": "#222",
+    "border": "#292929",
+    "black": "#FFFFFF",
+    "white": "#000000",
+    "body": "#111"
+  },
+  "red": "#f24",
+  "orange": "#f50",
+  "yellow": "#ec1",
+  "green": "#1c9",
+  "blue": "#09d",
+  "purple": "#40a",
+}
+
+manager.prototype.skin = function(name) {
+
+  var names = name.split("-")
+
+  nx.colorize("fill", nx.themes[names[0]].fill)
+  nx.colorize("border", nx.themes[names[0]].border)
+  nx.colorize("black", nx.themes[names[0]].black)
+  nx.colorize("white", nx.themes[names[0]].white)
+
+  nx.colorize("accent", nx.themes[names[1]])
+
+  document.body.style.backgroundColor = nx.themes[names[0]].body
+}
+
+
+manager.prototype.labelSize = function(size) {
+  for (var key in this.widgets) {
+    var widget = this.widgets[key]
+     
+    if (widget.label) {
+      var newheight = widget.GUI.h + size
+      widget.labelSize = size
+      if (["select","number","text"].indexOf(widget.type)<0) {
+        widget.resize(false,newheight)
+      }
+    }
+  }
+  var textLabels = document.querySelectorAll(".nxlabel");
+  console.log(textLabels)
+ 
+  for (var i = 0; i < textLabels.length; i++) {
+      console.log(textLabels[i])
+      textLabels[i].style.fontSize = size/2.8+"px"
+      console.log(textLabels[i].style.fontSize)
+  }
+}
+
+
+
+
+},{"../utils/drawing":5,"../utils/timing":7,"../utils/transmit":8,"../widgets":18,"events":47,"util":51}],3:[function(require,module,exports){
+var EventEmitter = require('events').EventEmitter;
+var util = require('util');
+var domUtils = require('../utils/dom');
+var drawingUtils = require('../utils/drawing');
+var timingUtils = require('../utils/timing');
+var transmit = require('../utils/transmit');
+
+
+
+var widget = module.exports = function (target) {
+  EventEmitter.apply(this)
+  this.preClick = this.preClick.bind(this)
+  this.preMove = this.preMove.bind(this)
+  this.preRelease = this.preRelease.bind(this)
+  this.preTouch = this.preTouch.bind(this)
+  this.preTouchMove = this.preTouchMove.bind(this)
+  this.preTouchRelease = this.preTouchRelease.bind(this)
+
+/** 
+
+  @class widget
+  All NexusUI interface widgets inherit from the widget class. The properties and methods of the widget class are usable by any NexusUI interface.
+  
+*/
+
+  /**  @property {string} canvasID ID attribute of the interface's HTML5 canvas */
+  this.canvasID = target;
+  /**  @property {string} oscPath OSC prefix for this interface. By default this is populated using the canvas ID (i.e. an ID of dial1 has OSC path /dial1) */
+  this.oscPath = "/"+target;
+  if (!document.getElementById(target)) {
+    var newcanv = document.createElement("canvas")
+    newcanv.id = target;
+    document.body.appendChild(newcanv)
+  }
+  /**
+   * @property {string} type The type of NexusUI widget (i.e. "dial", "toggle", "slider"). Set automatically at creation.
+   */
+  this.type = undefined;
+  /**  @property {DOM element} canvas The widget's HTML5 canvas */
+  this.canvas = document.getElementById(target);
+  /**  @property {HTML5 drawing context} context The canvas's drawing context */
+  this.context = this.canvas.getContext("2d");
+
+  this.checkPercentage();
+  this.canvas.className = this.canvas.className ? this.canvas.className += " nx" : "nx"
+
+  this.canvas.height = window.getComputedStyle(document.getElementById(target), null).getPropertyValue("height").replace("px","");
+  this.canvas.width = window.getComputedStyle(document.getElementById(target), null).getPropertyValue("width").replace("px","");
+  /**  @property {integer} height The widget canvas's computed height in pixels */
+  this.height = parseInt(window.getComputedStyle(document.getElementById(target), null).getPropertyValue("height").replace("px",""));
+  /**  @property {integer} width The widget canvas's computed width in pixels */
+  this.width = parseInt(window.getComputedStyle(document.getElementById(target), null).getPropertyValue("width").replace("px",""));
+  if (!this.defaultSize) {
+    /**  @property {object} defaultSize The widget's default size if not defined with HTML/CSS style. (Has properties 'width' and 'height', both in pixels) */
+    this.defaultSize = { width: 100, height: 100 };
+  }
+  
+  /**  @property {boolean} label Whether or not to draw a text label this widget.   */
+  this.label = false
+  this.labelSize = 30
+  this.labelAlign = "center"
+  this.labelFont = "'Open Sans'"
+
+  if (this.canvas.getAttribute("label")!=null) {
+    this.label = this.canvas.getAttribute("label")
+    this.origDefaultHeight = this.defaultSize.height
+  }
+  if (this.label) {
+    this.defaultSize.height += this.labelSize
+  }
+
+  if (this.width==300 && this.height==150) {
+    this.canvas.width = this.defaultSize.width*2;
+    this.canvas.height = this.defaultSize.height*2;
+    this.width = this.defaultSize.width;
+    this.height = this.defaultSize.height;
+  } else {
+  	var proxyw = this.width;
+  	var proxyh = this.height;
+  	this.canvas.width = proxyw*2;
+    this.canvas.height = proxyh*2;
+    this.width = proxyw;
+    this.height = proxyh;
+  }
+  this.canvas.style.width = this.canvas.width/2+"px";
+  this.canvas.style.height = this.canvas.height/2+"px";
+  this.context.scale(2,2)
+
+
+  this.makeRoomForLabel()
+
+  /**  @property {object} offset The widget's computed offset from the top left of the document. (Has properties 'top' and 'left', both in pixels) */
+  this.offset = domUtils.findPosition(this.canvas);
+  /**  @property {object} center The center of the widget's canvas. A 100x100 widget would have a center at 50x50. (Has properties 'x' and 'y', both in pixels) */
+  this.center = {
+    x: this.GUI.w/2,
+    y: this.GUI.h/2
+  };
+  //drawing
+  /**  @property {integer} lineWidth The default line width for drawing (default is 2 pixels). In many widgets, this is overwritten to suite the widget. However it does dictate the border width on most widgets. */
+  this.lineWidth = 2;
+  this.context.lineWidth = this.lineWidth;
+  /**  @property {object} colors A widget's individual color scheme. Inherited from nx.colors. (Has properties "accent", "fill", "border", "black", and "white") */
+  this.colors = new Object();
+  // define colors individually so they are not pointers to nx.colors
+  // this way each object can have its own color scheme
+  for (var key in nx.colors) {
+    this.colors[key] = nx.colors[key]
+  }
+  /*this.colors.accent = nx.colors.accent;
+  this.colors.fill = nx.colors.fill;
+  this.colors.border = nx.colors.border;
+  this.colors.accentborder = nx.colors.accentborder;
+  this.colors.black = nx.colors.black;
+  this.colors.white = nx.colors.white; 
+  this.colors.highlight = nx.colors.highlight; */
+  //interaction
+  /**  @property {object} clickPos The most recent mouse/touch position when interating with a widget. (Has properties x and y) */
+  this.clickPos = {x: 0, y: 0};
+  /**  @property {array} clickPos.touches If multitouch, an array of touch positions  */
+  this.clickPos.touches = new Array();
+  /**  @property {boolean} clicked Whether or not the widget is currently clicked  */
+  this.clicked = false;
+  this.value = 0;
+    /**
+      @property {object} val An object containing the core interactive values of the widget, which are also the widget's data output. 
+    */
+  this.val = new Object();
+  this.pval = new Object();
+  this.nodePos = new Array();
+  /**  @property {object} deltaMove Difference between the current touch/mouse position and the previous touch/mouse position, in pixels.   */
+  this.deltaMove = new Object();
+  this.throttlePeriod = nx.throttlePeriod;
+  this.throttle = timingUtils.throttle;
+  this.hasMoved = false;
+  //recording
+  /**  @property {boolean} isRecording Whether or not this widget's output is being recorded to a "remix" widget */
+  this.isRecording = false;
+  this.tapeNum = 0;
+  this.recorder = null;
+  //transmission
+  if (transmit) {
+    /**  @method sendsTo
+    Set the transmission protocol for this widget individually 
+    @param {string or function} [destination] Protocol for transmitting data from this widget (i.e. "js", "ajax", "ios", "max", or "node"). Also accepts custom functions.
+    ```js
+    dial1.sendsTo("ajax")
+
+    // or
+
+    dial1.sendsTo(function(data) {
+         //define a custom transmission function
+    })
+    ```  
+    */
+    this.sendsTo = transmit.setWidgetTransmit;
+    this.destination = "js";
+  }
+  this.events = new Object();
+
+  // Setup interaction
+  if (nx.isTouchDevice) {
+    this.canvas.ontouchstart = this.preTouch;
+    this.canvas.ontouchmove = this.preTouchMove;
+    this.canvas.ontouchend = this.preTouchRelease;
+  } else {
+    this.canvas.addEventListener('mousedown', this.preClick, false);
+  }
+
+  this.fontSize = nx.fontSize;
+  this.fontWeight = nx.fontWeight;
+  this.font = nx.font;
+
+  this.clickCB = false;
+  this.releaseCB = false;
+
+  this.actuated = true;
+
+
+
+}
+util.inherits(widget, EventEmitter)
+
+/**  @method transmit
+    The "output" instructions for sending the widget's data to another application or to a JS callback. Inherited from nx.transmit and executed when each widget is interacted with or during animation. Set using .sendsTo() to use our built-in transmission defintions.
+    @param {object} [data] The data to be transmitted. Each property of the object will become its own OSC message if sending via "ajax" or "max7" protocols. (This works with objects nested to up to 2 levels).
+*/
+widget.prototype.transmit = nx.transmit;
+
+/**  @method makeOSC
+    Loops through an object (i.e. a widget's data), creates OSC path/value pairs, and executes a callback function with these two arguments.
+    @param {function} [callback] A function defining the action to be taken with each OSC path/value pair. This function should have two parameters, path (string) and data (type depends on widget data type).
+    @param {object} [data] The data as an object, to be broken into individual OSC messages.
+*/
+widget.prototype.makeOSC = function(action, data) {
+    this.action = action;
+    if ((typeof data == "object") && (data !== null)) {
+      for (var key in data) {
+        if ((typeof data[key] == "object") && (data[key] !== null)) {
+          for (var key2 in data[key]) {
+              this.action(key+"/"+key2, data[key][key2])
+          }
+        } else {
+            this.action(key, data[key])
+        }
+      }
+    } else if (typeof data == "number" || typeof data == "string") {
+        this.action('value', data)
+    }
+}
+
+// getoffset is useful as an API for others
+// otherwise they would have to write
+// dial1.offset = utils.findPosition()
+// now it is simply:
+// dial1.getOffset()
+
+/**  @method getOffset
+    Recalculate the computed offset of the widget's canvas and store it in widget.offset. This is useful if a widget has been moved after being created.
+    */
+widget.prototype.getOffset = function() {
+  this.offset = domUtils.findPosition(this.canvas)
+}
+
+widget.prototype.preClick = function(e) {
+  this.actuated = true;
+  this.offset = domUtils.findPosition(this.canvas)
+  this.clickPos = domUtils.getCursorPosition(e, this.offset);
+  // need something like:
+  // if (this.clickPos.y < this.GUI.h) { 
+  document.addEventListener("mousemove", this.preMove, false);
+  document.addEventListener("mouseup", this.preRelease, false);
+  this.clicked = true;
+  this.deltaMove.x = 0;
+  this.deltaMove.y = 0;
+  this.hasMoved = false;
+  this.clickCB ? this.clickCB() : null;
+  this.click(e);
+  document.body.style.userSelect = "none";
+  document.body.style.mozUserSelect = "none";
+  document.body.style.webkitUserSelect = "none";
+  document.body.style.cursor = "none"
+}
+
+widget.prototype.preMove = function(e) {
+  this.actuated = true;
+  var newClickPos = domUtils.getCursorPosition(e, this.offset);
+  this.deltaMove.y = newClickPos.y - this.clickPos.y;
+  this.deltaMove.x = newClickPos.x - this.clickPos.x;
+  this.clickPos = newClickPos;
+  this.hasMoved = true;
+  this.move(e);
+}
+
+widget.prototype.preRelease = function(e) {
+  this.actuated = true;
+  document.removeEventListener("mousemove", this.preMove, false);
+  document.removeEventListener("mouseup", this.preRelease, false);
+  this.clicked = false;
+  this.releaseCB ? this.releaseCB() : null;
+  this.release();
+  document.body.style.userSelect = "text";
+  document.body.style.mozUserSelect = "text";
+  document.body.style.webkitUserSelect = "text";
+  document.body.style.cursor = "pointer"
+}
+
+widget.prototype.preTouch = function(e) {
+  this.actuated = true;
+  this.clickPos = domUtils.getTouchPosition(e, this.offset);
+  this.clicked = true;
+  this.deltaMove.x = 0;
+  this.deltaMove.y = 0;
+  this.hasMoved = false;
+  this.touch(e);
+}
+
+widget.prototype.preTouchMove = function(e) {
+  if (this.clicked) {
+    this.actuated = true;
+    var newClickPos = domUtils.getTouchPosition(e, this.offset);
+    this.deltaMove.y = newClickPos.y - this.clickPos.y;
+    this.deltaMove.x = newClickPos.x - this.clickPos.x;
+    this.clickPos = newClickPos;
+    this.hasMoved = true;
+    this.touchMove(e);
+  }
+}
+
+widget.prototype.preTouchRelease = function(e) {
+  this.actuated = true;
+  if (e.targetTouches.length>=1) {
+    var newClickPos = domUtils.getTouchPosition(e, this.offset);
+    this.clickPos = newClickPos;
+  } else {
+    this.clicked = false;
+  }
+  this.touchRelease();
+}
+
+
+/**  @method init
+     Initialize or re-initialize the widget. Defined separately within each widget.
+    */
+
+/**  @method draw
+    Draw the widget onto the canvas.
+    */
+widget.prototype.draw = function() {
+}
+
+
+/**  @method click
+    Executes when the widget is clicked on
+    */
+widget.prototype.click = function() {
+}
+
+
+/**  @method move
+    Executes on drag (mouse moves while clicked).
+    */
+widget.prototype.move = function() {
+}
+
+
+/**  @method release
+    Executes when the mouse releases after having clicked on the widget.
+    */
+widget.prototype.release = function() {
+}
+
+/**  @method touch
+    Executes when the widget is touched on a touch device.
+    */
+widget.prototype.touch = function() {
+  this.click();
+}
+
+/**  @method touchMove
+    Executes on drag (touch then move) on a touch device
+    */
+widget.prototype.touchMove = function() {
+  this.move();
+}
+
+/**  @method touchRelease
+    Executes when the touch releases after having touched the widget.
+    */
+widget.prototype.touchRelease = function() {
+  this.release();
+}
+
+widget.prototype.adjustSizeIfDefault = function() {
+  if (this.width==300 && this.height==150) {
+    this.canvas.width = this.defaultSize.width;
+    this.canvas.height = this.defaultSize.height;
+    this.width = this.defaultSize.width;
+    this.height = this.defaultSize.height;
+  }
+}
+
+widget.prototype.makeRoundedBG = function() {
+  this.bgLeft = this.lineWidth;
+  this.bgRight = this.width - this.lineWidth;
+  this.bgTop = this.lineWidth;
+  this.bgBottom = this.height - this.lineWidth;
+  this.bgHeight = this.bgBottom - this.lineWidth;
+  this.bgWidth = this.bgRight - this.lineWidth; 
+  
+  drawingUtils.makeRoundRect(this.context, this.bgLeft, this.bgTop, this.bgWidth, this.bgHeight);
+}
+
+/**  @method erase
+    Erase the widget's canvas.
+    */
+widget.prototype.erase = function() {
+  this.context.clearRect(0,0,this.width,this.height);
+}
+
+widget.prototype.hideCursor = function() {
+  this.canvas.style.cursor = "none";
+}
+
+widget.prototype.showCursor = function() {
+  this.canvas.style.cursor = "auto";
+}
+
+// allow us to get the constructor function name programatically
+//i.e. if element is a dial, this function will return "dial"
+//deprecated
+widget.prototype.getName = function() {
+  return "deprecated -- use widget.type instead"
+}
+
+/** @method set
+Manually set a widget's value (that is, set any properties of a widget's .val). See widget.val or the .val property of individual widgets for more info. 
+@param {object} [data] Parameter/value pairs in object notation.
+@param {boolean} [transmit] (optional) Whether or not to transmit new value after being set.
+Sets the value of an object. 
+
+```js
+  position1.set({
+  &nbsp;  x: 100,
+  &nbsp;  y: 250
+  })
+```
+
+An optional second argument decides whether the object then transmits its new value.
+```js
+  button1.set({
+  &nbsp;  press: 100
+  }, true)
+```
+*/
+widget.prototype.set = function(data, transmit) {
+
+  this.actuated = false;
+
+  if (typeof this.val == "object" && this.val !== "null") {
+    if (typeof data == "object" && data !== "null") {
+      for (var key in data) {
+        this.val[key] = data[key];
+      }
+    }
+  } else if (typeof this.val == "string" || typeof this.val == "number") {
+    if (typeof data == "object" && data !== "null") {
+      this.val = data["value"];
+      this.draw();
+    } else if (typeof data == "string" || typeof data == "number") {
+      this.val = data;
+    }
+  }
+  this.draw();
+
+  if (transmit) {
+    this.transmit(this.val,true)
+  }
+}
+
+/**  @method destroy
+    Remove the widget object, canvas, and all related event listeners from the document.
+    */
+widget.prototype.destroy = function() {
+  var type = nx.elemTypeArr.indexOf(this.getName())
+  nx.elemTypeArr.splice(type,1)
+
+  this.canvas.ontouchmove = null;
+  this.canvas.ontouchend = null;
+  this.canvas.onclick = null;
+  this.canvas.onmousemove = null;
+  this.canvas.onmouseoff = null;
+  document.removeEventListener("mousemove", this.preMove, false);
+  document.removeEventListener("mouseup", this.preRelease, false);
+
+  var elemToKill = document.getElementById(this.canvasID)
+  if (elemToKill) {
+    elemToKill.parentNode.removeChild(elemToKill);
+  }
+
+  this.customDestroy();
+
+  var id = this.canvasID
+  delete nx.widgets[id];
+  delete window[id];
+
+}
+
+widget.prototype.customDestroy = function() {
+
+}
+
+widget.prototype.wrapText = function(text, x, y, maxWidth, lineHeight) {
+  if (text) {
+    var words = text.split(' ');
+    var line = '';
+
+    for(var n = 0; n < words.length; n++) {
+      var testLine = line + words[n] + ' ';
+      var metrics = this.context.measureText(testLine);
+      var testWidth = metrics.width;
+      if (testWidth > maxWidth && n > 0) {
+        this.context.fillText(line, x, y);
+        line = words[n] + ' ';
+        y += lineHeight;
+      }
+      else {
+        line = testLine;
+      }
+    }
+    this.context.fillText(line, x, y);
+  }
+}
+
+widget.prototype.drawLabel = function() {
+  if (this.label) {
+    with(this.context) {
+      fillStyle = this.colors.black;
+      textAlign = "center"
+      textBaseline = "middle";
+      font = (this.labelSize/2.8) + "px "+this.labelFont+" normal"
+      fillText(this.label,this.width/2,this.labelY);
+    }
+  }
+}
+
+/**  @method saveCanv
+     Download the widget's current graphical state as an image (png).
+    */
+widget.prototype.saveCanv = function() {
+  var data = this.canvas.toDataURL("image/png").replace("image/png", "image/octet-stream");
+  window.location.href = data
+}
+
+widget.prototype.setFont = function() {
+  with (this.context) {
+      textAlign = "center";
+      font = this.fontWeight+" "+this.fontSize+"px "+this.font;
+      fillStyle = this.colors.black;
+      globalAlpha = 1;
+  }
+}
+
+
+/* Percentage width support */
+
+
+widget.prototype.checkPercentage = function() {
+  var wstr = this.canvas.style.width;
+  var hstr = this.canvas.style.height;
+  if (wstr.indexOf("%") >= 0 || hstr.indexOf("%") >= 0) {
+    this.percent = {
+      w: (wstr.indexOf("%") >= 0) ? wstr.replace("%","") : false,
+      h: (hstr.indexOf("%") >= 0) ? hstr.replace("%","") : false
+    }
+    this.stretch();
+  }
+}
+
+widget.prototype.stretch = function() {
+  window.addEventListener("resize", function(e) {
+    if (this.percent.w) {
+      var newWidth = window.getComputedStyle(this.canvas.parentNode, null).getPropertyValue("width").replace("px","");
+      newWidth *= this.percent.w/100
+    } else {
+      var newWidth = false;
+    }
+    if (this.percent.h) {
+      var newHeight = window.getComputedStyle(this.canvas.parentNode, null).getPropertyValue("height").replace("px","");
+      newHeight *= this.percent.h/100 
+    } else {
+      var newHeight = false;
+    }
+    this.resize(newWidth,newHeight);
+  }.bind(this))
+}
+
+widget.prototype.resize = function(w,h) {
+
+  this.canvas.width = w ? w*2 : this.canvas.width;
+  this.canvas.height = h ? h*2 : this.canvas.height;
+  this.width =  w ? w : this.width;
+  this.height = h ? h : this.height;
+  this.canvas.style.width = this.width+"px";
+  this.canvas.style.height = this.height+"px";
+  this.context.scale(2,2)
+
+  this.center = {
+    x: this.GUI.w/2,
+    y: this.GUI.h/2
+  };
+
+  this.makeRoomForLabel()
+
+  this.init();
+  this.draw();
+  
+}
+
+widget.prototype.normalize = function(value) {
+  return nx.scale(value,this.min,this.max,0,1)
+}
+widget.prototype.rangify = function(value) {
+  return nx.scale(value,0,1,this.min,this.max)
+}
+
+
+widget.prototype.makeRoomForLabel = function() {
+  this.GUI = {
+    w: this.width,
+    h: this.label ? this.height - this.labelSize : this.height
+  }
+  this.labelY = this.height - this.labelSize/2;
+  // must add the above code to widget.resize
+}
+},{"../utils/dom":4,"../utils/drawing":5,"../utils/timing":7,"../utils/transmit":8,"events":47,"util":51}],4:[function(require,module,exports){
+
+/** @class utils 
+  Shared utility functions. These functions are exposed as methods of nx in NexusUI projects, i.e. .mtof() here can be accessed in your project with nx.mtof().
+*/
+
+
+/** @method findPosition 
+    Returns the offset of an HTML element. Returns an object with 'top' and 'left' properties.
+    @param {DOM element} [element] 
+    ```js
+    var button1Offset = nx.findPosition(button1.canvas)
+    ```
+*/
+exports.findPosition = function(element) {
+  var body = document.body,
+      win = document.defaultView,
+      docElem = document.documentElement,
+      box = document.createElement('div');
+  box.style.paddingLeft = box.style.width = "1px";
+  body.appendChild(box);
+  var isBoxModel = box.offsetWidth == 2;
+  body.removeChild(box);
+  box = element.getBoundingClientRect();
+  var clientTop  = docElem.clientTop  || body.clientTop  || 0,
+      clientLeft = docElem.clientLeft || body.clientLeft || 0,
+      scrollTop  = win.pageYOffset || isBoxModel && docElem.scrollTop  || body.scrollTop,
+      scrollLeft = win.pageXOffset || isBoxModel && docElem.scrollLeft || body.scrollLeft;
+  return {
+    top : box.top  + scrollTop  - clientTop,
+    left: box.left + scrollLeft - clientLeft
+  };
+}
+
+exports.getCursorPosition = function(e, canvas_offset) {
+  var x;
+  var y;
+  if (e.pageX != undefined && e.pageY != undefined) {
+    x = e.pageX;
+    y = e.pageY;
+  } else {
+    x = e.clientX + document.body.scrollLeft + document.documentElement.scrollLeft;
+    y = e.clientY + document.body.scrollTop + document.documentElement.scrollTop;
+  }
+  x -= canvas_offset.left;
+  y -= canvas_offset.top;
+  var click_position = {x: x, y: y};
+  click_position.touches = [ {x: x, y: y } ];
+  return click_position;
+}
+
+exports.getTouchPosition = function(e, canvas_offset) {
+  var x;
+  var y;
+  x = e.targetTouches[0].pageX;
+  y = e.targetTouches[0].pageY;
+  x -= canvas_offset.left;
+    y -= canvas_offset.top;
+  var click_position = {x: x, y: y};
+
+  click_position.touches = new Array();
+  for (var i=0;i<e.targetTouches.length;i++) {
+     click_position.touches.push({
+      x: e.targetTouches[i].pageX - canvas_offset.left,
+      y: e.targetTouches[i].pageY - canvas_offset.top
+    });
+  }
+  click_position.changed = new Array();
+  for (var i=0;i<e.changedTouches.length;i++) {
+     click_position.changed.push({
+      x: e.changedTouches[i].pageX - canvas_offset.left,
+      y: e.changedTouches[i].pageY - canvas_offset.top
+    });
+  }
+  return click_position;
+}
+},{}],5:[function(require,module,exports){
+var math = require('./math')
+
+/** @method randomColor
+    Returns a random color string in rgb format
+*/
+exports.randomColor = function() {
+  return "rgb(" + math.random(250) + "," + math.random(250) + "," + math.random(250) + ")";
+}
+
+/** @method hexToRgb
+    Converts a hex color code to rgb format
+    @param {color code} [hex] Input color code in hex format
+    @param {float} [alpha] Color alpha level
+*/
+exports.hexToRgb = function(hex, a) {
+  // Expand shorthand form (e.g. "03F") to full form (e.g. "0033FF")
+  var shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+  hex = hex.replace(shorthandRegex, function(m, r, g, b) {
+      return r + r + g + g + b + b;
+  });
+
+  var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!a) {
+    a = 0.5;
+  }
+  
+  var r = parseInt(result[1], 16);
+  var g = parseInt(result[2], 16);
+  var b = parseInt(result[3], 16);
+
+  return "rgba(" + r + "," + g + "," + b + "," + a + ")";
+}
+
+exports.isInside = function(clickedNode,currObject) {
+  if (clickedNode.x > currObject.x && clickedNode.x < (currObject.x+currObject.w) && clickedNode.y > currObject.y && clickedNode.y < (currObject.y+currObject.h)) {
+    return true;
+  } else {
+    return false; 
+  }
+}
+
+exports.makeRoundRect = function(ctx,xpos,ypos,wid,hgt,depth) {
+  var x1 = xpos;
+  var y1 = ypos;
+  var x2 = wid+x1;
+  var y2 = hgt+y1;
+  if (!depth) {
+    depth = 2;
+  }
+  
+  ctx.beginPath();
+  ctx.moveTo(x1+depth, y1); //TOP LEFT
+  ctx.lineTo(x2-depth, y1); //TOP RIGHT
+  ctx.quadraticCurveTo(x2, y1, x2, y1+depth);
+  ctx.lineTo(x2, y2-depth); //BOTTOM RIGHT
+  ctx.quadraticCurveTo(x2, y2, x2-depth, y2);
+  ctx.lineTo(x1+depth, y2); //BOTTOM LEFT
+  ctx.quadraticCurveTo(x1, y2, x1, y2-depth);
+  ctx.lineTo(x1, y1+depth); //TOP LEFT
+  ctx.quadraticCurveTo(x1, y1, x1+depth, y1);
+  ctx.closePath();
+}
+
+exports.text = function(context, text, position) {
+  if (!position) {
+    position = [10 , 10];
+  }
+  with(context) {
+    beginPath();
+    font = "bold 12px sans-serif";
+    fillText(text,position[0],position[1]);
+    closePath();
+  }
+}
+
+exports.shadeBlendConvert = function(p, from, to) {
+    if(typeof(p)!="number"||p<-1||p>1||typeof(from)!="string"||(from[0]!='r'&&from[0]!='#')||(typeof(to)!="string"&&typeof(to)!="undefined"))return null; //ErrorCheck
+    this.sbcRip=function(d){
+        var l=d.length,RGB=new Object();
+        if(l>9){
+            d=d.split(",");
+            if(d.length<3||d.length>4)return null;//ErrorCheck
+            RGB[0]=i(d[0].slice(4)),RGB[1]=i(d[1]),RGB[2]=i(d[2]),RGB[3]=d[3]?parseFloat(d[3]):-1;
+        }else{
+            switch(l){case 8:case 6:case 3:case 2:case 1:return null;} //ErrorCheck
+            if(l<6)d="#"+d[1]+d[1]+d[2]+d[2]+d[3]+d[3]+(l>4?d[4]+""+d[4]:""); //3 digit
+            d=i(d.slice(1),16),RGB[0]=d>>16&255,RGB[1]=d>>8&255,RGB[2]=d&255,RGB[3]=l==9||l==5?r(((d>>24&255)/255)*10000)/10000:-1;
+        }
+        return RGB;}
+    var i=parseInt,r=Math.round,h=from.length>9,h=typeof(to)=="string"?to.length>9?true:to=="c"?!h:false:h,b=p<0,p=b?p*-1:p,to=to&&to!="c"?to:b?"#000000":"#FFFFFF",f=this.sbcRip(from),t=this.sbcRip(to);
+    if(!f||!t)return null; //ErrorCheck
+    if(h)return "rgb("+r((t[0]-f[0])*p+f[0])+","+r((t[1]-f[1])*p+f[1])+","+r((t[2]-f[2])*p+f[2])+(f[3]<0&&t[3]<0?")":","+(f[3]>-1&&t[3]>-1?r(((t[3]-f[3])*p+f[3])*10000)/10000:t[3]<0?f[3]:t[3])+")");
+    else return "#"+(0x100000000+(f[3]>-1&&t[3]>-1?r(((t[3]-f[3])*p+f[3])*255):t[3]>-1?r(t[3]*255):f[3]>-1?r(f[3]*255):255)*0x1000000+r((t[0]-f[0])*p+f[0])*0x10000+r((t[1]-f[1])*p+f[1])*0x100+r((t[2]-f[2])*p+f[2])).toString(16).slice(f[3]>-1||t[3]>-1?1:3);
+}
+},{"./math":6}],6:[function(require,module,exports){
+
+
+/** @method toPolar 
+    Receives cartesian coordinates and returns polar coordinates as an object with 'radius' and 'angle' properties.
+    @param {float} [x] 
+    @param {float} [y] 
+    ```js
+    var ImOnACircle = nx.toPolar({ x: 20, y: 50 }})
+    ```
+*/
+exports.toPolar = function(x,y) {
+  var r = Math.sqrt(x*x + y*y);
+
+  var theta = Math.atan2(y,x);
+  if (theta < 0.) {
+    theta = theta + (2 * Math.PI);
+  }
+  return {radius: r, angle: theta};
+}
+
+/** @method toCartesian 
+    Receives polar coordinates and returns cartesian coordinates as an object with 'x' and 'y' properties.
+    @param {float} [radius] 
+    @param {float} [angle] 
+*/
+exports.toCartesian = function(radius, angle){
+  var cos = Math.cos(angle);
+  var sin = Math.sin(angle);
+  return {x: radius*cos, y: radius*sin*-1};
+}
+
+
+/** @method clip 
+    Limits a number to within low and high values.
+    @param {float} [input value] 
+    @param {float} [low limit] 
+    @param {float} [high limit] 
+    ```js
+    nx.clip(5,0,10) // returns 5
+    nx.clip(15,0,10) // returns 10
+    nx.clip(-1,0,10) // returns 0
+    ```
+*/
+exports.clip = function(value, low, high) {
+  return Math.min(high, Math.max(low, value));
+}
+
+/** @method prune 
+    Limits a float to within a certain number of decimal places
+    @param {float} [input value] 
+    @param {integer} [max decimal places] 
+    ```js
+    nx.prine(1.2345, 3) // returns 1.234
+    nx.prune(1.2345, 1) // returns 1.2
+    ```
+*/
+
+exports.prune = function(data, scale) {
+  if (typeof data === "number") {
+    data = parseFloat(data.toFixed(scale));
+  } else if (data instanceof Array) {
+    for (var i=0;i<data.length;i++) {
+      if (typeof data[i]=="number") {
+        data[i] = parseFloat(data[i].toFixed(scale));
+      }
+    }
+  }
+  return data;
+}
+
+
+/** @method scale 
+    Scales an input number to a new range of numbers
+    @param {float} [input value] 
+    @param {float} [low1]  input range (low)
+    @param {float} [high1] input range (high)
+    @param {float} [low2] output range (low)
+    @param {float} [high2] output range (high)
+    ```js
+    nx.scale(5,0,10,0,100) // returns 50
+    nx.scale(5,0,10,1,2) // returns 1.5
+    ```
+*/
+exports.scale = function(inNum, inMin, inMax, outMin, outMax) {
+  return (((inNum - inMin) * (outMax - outMin)) / (inMax - inMin)) + outMin;  
+}
+
+/** @method invert 
+    Equivalent to nx.scale(input,0,1,1,0). Inverts a normalized (0-1) number. 
+    @param {float} [input value]  
+    ```js
+    nx.invert(0.25) // returns 0.75
+    nx.invert(0) // returns 1
+    ```
+*/
+exports.invert = function (inNum) {
+  return exports.scale(inNum, 1, 0, 0, 1);
+}
+
+exports.bounce = function(posIn, borderMin, borderMax, delta) {
+  if (posIn > borderMin && posIn < borderMax) {
+    return delta;
+  } else if (posIn <= borderMin) {
+    return Math.abs(delta); 
+  } else if (posIn >= borderMax) {
+    return Math.abs(delta) * (-1);
+  }
+}
+
+
+/** @method mtof 
+    MIDI to frequency conversion. Returns frequency in Hz.
+    @param {float} [MIDI] MIDI value to convert
+    ```js
+    nx.mtof(69) // returns 440
+    ```
+*/
+exports.mtof = function(midi) {
+  return Math.pow(2, ((midi-69)/12)) * 440;
+}
+
+
+/** @method random 
+    Returns a random integer between 0 a given scale parameter.
+    @param {float} [scale] Upper limit of random range.
+    ```js
+    nx.random(10) // returns a random number from 0 to 9.
+    ```
+*/
+exports.random = function(scale) {
+  return Math.floor(Math.random() * scale);
+}
+
+
+exports.interp = function(loc,min,max) {
+  return loc * (max - min) + min;  
+}
+
+exports.lphistory = {}
+
+
+exports.lp = function(tag,value,limit) {
+
+  if (!this.lphistory[tag]) {
+    this.lphistory[tag] = []
+  }
+
+  var total = 0;
+
+  this.lphistory[tag].push(value)
+
+  if (this.lphistory[tag].length>limit) {
+    this.lphistory[tag].splice(0,1)
+  }
+
+  for (var i=0;i<this.lphistory[tag].length;i++) {
+    total += this.lphistory[tag][i]
+  }
+
+  var newvalue = total / this.lphistory[tag].length;
+
+  return newvalue;
+}
+
+
+exports.lp2 = function(value,limit) {
+
+  var total = 0;
+  for (var i=0;i<this.lphistory.length;i++) {
+    total += this.lphistory[i]
+  }
+  total += value;
+
+  var newvalue = total / ( this.lphistory.length + 1 )
+
+  this.lphistory.push(newvalue)
+
+  if (this.lphistory.length>limit) {
+    this.lphistory.splice(0,1)
+  }
+
+  return newvalue;
+}
+
+
+exports.lp3 = function(value,pvalue,limit) {
+
+  var total = value + pvalue * limit;
+  newvalue = total / (limit + 1)
+
+  return newvalue;
+}
+},{}],7:[function(require,module,exports){
+
+
+exports.throttle = function(func, wait) {
+  var timeout;
+  return function() {
+    var context = this, args = arguments;
+    if (!timeout) {
+      // the first time the event fires, we setup a timer, which 
+      // is used as a guard to block subsequent calls; once the 
+      // timer's handler fires, we reset it and create a new one
+      timeout = setTimeout(function() {
+        timeout = null;
+        try {
+          func.apply(context, args);
+        } catch (err) {
+          console.log(err);
+        }
+      }, wait);
+    }
+  }
+}
+},{}],8:[function(require,module,exports){
+exports.defineTransmit = function(protocol) {
+  
+  var newTransmit;
+
+  if (typeof(protocol)=="function") {
+    return protocol;
+  } else {
+    switch (protocol) {
+      case 'js':
+        newTransmit = function(data,passive) {
+          this.makeOSC(this.emit, data, passive);
+          this.emit('*',data, passive);
+        }
+        return newTransmit
+      
+      case 'ajax':
+        newTransmit = function(data) {
+          this.makeOSC(exports.ajaxTransmit, data);
+        }
+        return newTransmit
+      
+      case 'node':
+        newTransmit = function(data) {
+          this.makeOSC(exports.nodeTransmit, data);
+        }
+        return newTransmit
+      
+      case 'ios':
+        newTransmit = function(data) {
+          
+        }
+        return newTransmit
+      
+      case 'max':
+        newTransmit = function(data) {
+          this.makeOSC(exports.maxTransmit, data);
+        }
+        return newTransmit
+
+      case 'wc':
+        newTransmit = function(data, passive) {
+          this.emit('internal',data, passive);
+        }
+        return newTransmit
+    }
+  }
+}
+
+exports.setGlobalTransmit = function(protocol) {
+  var newTransmit = exports.defineTransmit(protocol)
+  this.transmit = newTransmit
+  this.destination = protocol
+  for (var key in nx.widgets) {
+    this.widgets[key].transmit = newTransmit;
+    this.widgets[key].destination = protocol;
+  }
+}
+
+exports.setWidgetTransmit = function(protocol) {
+  var newTransmit = exports.defineTransmit(protocol)
+  this.transmit = newTransmit
+  this.destination = protocol
+}
+
+
+exports.ajaxTransmit = function(subPath, data) {
+
+    var oscPath = subPath=='value' ? this.oscPath : this.oscPath+"/"+subPath;
+     
+    xmlhttp=new XMLHttpRequest();
+    xmlhttp.open("POST",nx.ajaxPath,true);
+    xmlhttp.setRequestHeader("Content-type","application/x-www-form-urlencoded");
+    xmlhttp.send('oscName='+oscPath+'&data='+data);
+
+}
+
+exports.setAjaxPath = function(path) {
+  this.ajaxPath = path;
+}
+
+exports.nodeTransmit = function(subPath, data) {
+   
+    var msg = {
+      oscName: subPath=='value' ? this.oscPath : this.oscPath+"/"+subPath,
+      value: data
+    }
+    socket.emit('nx', msg)
+
+}
+
+exports.maxTransmit = function (subPath, data) {
+    var oscPath = subPath=='value' ? this.oscPath : this.oscPath+"/"+subPath;
+    window.max.outlet(oscPath + " " + data);
+}
+},{}],9:[function(require,module,exports){
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class banner      
+	"Powered by NexusUI" tag with a link to our website. Use it if you want to share the positive vibes of NexusUI. Thanks for using!
+	```html
+	<canvas nx="banner"></canvas>
+	```
+	<canvas nx="banner" style="margin-left:25px"></canvas>
+*/
+
+var banner = module.exports = function (target) {
+	this.defaultSize = { width: 100, height: 40 };
+	widget.call(this, target);
 	
-	var _interopRequireWildcard = function (obj) { return obj && obj.__esModule ? obj : { "default": obj }; };
+	//unique attributes
+	/** @property {string} message1 The first line of text on the banner. */
+	this.message1 = "Powered By";
+	/** @property {string} message2 The second line of text on the banner. */
+	this.message2 = "NexusUI";
+	/** @property {string} link The URL the banner will link to. */
+	this.link = "http://www.nexusosc.com";
+	/** @property {boolean} isLink Whether or not the banner is a hyperlink. Defaults to true. */
+	this.isLink = true;
+}
+util.inherits(banner, widget);
+
+banner.prototype.init = function() {
+	this.draw();
+}
+
+banner.prototype.draw = function() {
+	with (this.context) {
+
+		globalAlpha = 0.1;
+		fillStyle = this.colors.accent;
+		beginPath();
+			moveTo(0,10);
+			lineTo(10,this.GUI.h/2+5);
+			lineTo(0,this.GUI.h);
+			lineTo(30,this.GUI.h);
+			lineTo(30,10);
+			fill();
+			moveTo(this.GUI.w-30,10);
+			lineTo(this.GUI.w-30,this.GUI.h);
+			lineTo(this.GUI.w,this.GUI.h);
+			lineTo(this.GUI.w-10,this.GUI.h/2+5);
+			lineTo(this.GUI.w,10);
+			fill();
+		closePath();
+		globalAlpha = 1;
+
+		fillStyle = this.colors.accent;
+		fillRect(15,0,this.GUI.w-30,this.GUI.h-10);
+		
+		fillStyle = this.colors.white;
+		font = this.fontWeight + " " +this.GUI.h/5+"px "+this.font;
+		textAlign = "center";
+		fillText(this.message1, this.GUI.w/2, this.GUI.h/3.3);
+		fillText(this.message2, this.GUI.w/2, (this.GUI.h/3.3)*2);
+
+		fillStyle = this.colors.black;
+		beginPath();
+			moveTo(15,this.GUI.h-10);
+			lineTo(30,this.GUI.h);
+			lineTo(30,this.GUI.h-10);
+			lineTo(15,this.GUI.h-10);
+			fill();
+			moveTo(this.GUI.w-15,this.GUI.h-10);
+			lineTo(this.GUI.w-30,this.GUI.h);
+			lineTo(this.GUI.w-30,this.GUI.h-10);
+			lineTo(this.GUI.w-15,this.GUI.h-10);
+			fill();
+		closePath();
 	
-	var _interopRequire = function (obj) { return obj && obj.__esModule ? obj["default"] : obj; };
+	}
+}
+
+banner.prototype.click = function() {
+	if (this.isLink) {
+		window.location = this.link;
+	}
+}
+},{"../core/widget":3,"util":51}],10:[function(require,module,exports){
+var util = require('util');
+var widget = require('../core/widget');
+var drawing = require('../utils/drawing');
+
+var button = module.exports = function(target) {
+
+/** 
 	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
+	@public
+	@class button 
+
+	Touch button with three modes of interaction ("toggle", "impulse", and "aftertouch").
+	```html
+	<canvas nx="button"></canvas>
+	```
+	<canvas nx="button" style="margin-left:25px"></canvas>
+*/
+
+	this.defaultSize = { width: 50, height: 50 };
+	widget.call(this, target);
+
+	/** 
+		@property {object}  val  Main value set and output, with sub-properties:
+		| &nbsp; | data
+		| --- | ---
+		| *press* | 0 (clicked) or 1 (unclicked)
+		| *x* | 0-1 float of x-position of click ("aftertouch" mode only)
+		| *y* | 0-1 float of y-position of click ("aftertouch" mode only) 
+		
+		When the widget is interacted with, val is sent as the output data for the widget.
+		```js 
+		button1.on('*', function(data) {
+			// some code using data.press, data.x, and data.y
+		});
+		```
+		Or, if NexusUI is outputting OSC (e.g. if nx.sendsTo("ajax")), val will be broken into OSC messages: 
+		```html 
+		/button1/press 1
+		/button1/x 37
+		/button1/y 126
+		```
+		*/
+	this.val = {
+		press: 0
+	}
 	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
+	/** @property {string}  mode  Interaction mode. Options:
+	<b>impulse</b> &nbsp; 1 on click <br>
+	<b>toggle</b> &nbsp;  1 on click, 0 on release<br>
+	<b>aftertouch</b> &nbsp; 1, x, y on click; x, y on move; 0, x, y on release _(default)_ <br> 
+	```js 
+	button1.mode = "aftertouch" 
+	```
+	*/
+	this.mode = "aftertouch";
+
+	this.lockResize = true;
+
+	this.image = null;
+	this.imageHover = null;
+	this.imageTouch = null;
+
+	this.subval = new Object();
+
+	this.init();
+
+}
+util.inherits(button, widget);
+
+button.prototype.init = function() {
+	this.center = {
+		x: this.GUI.w/2,
+		y: this.GUI.h/2
+	}
+	this.strokeWidth = this.GUI.w/20;
+	this.radius = (Math.min(this.center.x, this.center.y))
+	this.draw();
+}
+
+button.prototype.draw = function() {
+
+	this.erase();
 	
-	exports.colors = colors;
-	exports.context = context;
-	exports.clock = clock;
-	Object.defineProperty(exports, "__esModule", {
-	  value: true
-	});
-	"use strict";
+	with (this.context) {
+		
+		if (this.image !== null) {
+			// Image Button
+			if (!this.val.press) {
+				// Draw Image if not touched
+				drawImage(this.image, 0, 0);
+			} else {
+				if (this.imageTouch) {
+					// Draw Touch Image
+					drawImage(this.imageTouch, 0, 0)
+
+				} else {
+
+					drawImage(this.image, 0, 0)
+
+					// No touch image, apply highlighting
+					globalAlpha = 0.5;
+					fillStyle = this.colors.accent;
+					fillRect (0, 0, this.GUI.w, this.GUI.h);
+					globalAlpha = 1;
+					
+				} 
+			}
+			
+		} else {
 	
-	var Interfaces = _interopRequire(__webpack_require__(2));
+			// Regular Button
+			
+			if (!this.val.press) {
+				fillStyle = this.colors.fill
+				strokeStyle = this.colors.border
+			//	var strokealpha = 1
+			} else if (this.val.press) {
+				fillStyle = this.colors.accent;
+			//	strokeStyle = this.colors.accentborder || "#fff"
+				strokeStyle = this.colors.accenthl
+			//	var strokealpha = 0.2
+			}
+
+			lineWidth = this.strokeWidth;
+
+			beginPath();
+				arc(this.center.x, this.center.y, this.radius, 0, Math.PI*2, true);
+				fill()
+			closePath()
+
+			beginPath();
+				arc(this.center.x, this.center.y, this.radius-lineWidth/2, 0, Math.PI*2, true);
+			//	globalAlpha = strokealpha
+				stroke()
+				globalAlpha = 1
+			closePath()
+
+			if (this.val.press && this.mode=="aftertouch") {
+
+				var x = nx.clip(this.clickPos.x,this.GUI.w*.2,this.GUI.w/1.3)
+				var y = nx.clip(this.clickPos.y,this.GUI.h*.2,this.GUI.h/1.3)
+
+				var gradient = this.context.createRadialGradient(x,y,this.GUI.w/6,this.center.x,this.center.y,this.radius*1.3);
+				gradient.addColorStop(0,this.colors.accent);
+				gradient.addColorStop(1,"white");
+
+				strokeStyle = gradient;
+				lineWidth = this.GUI.w/20;
+
+				beginPath()
+					arc(this.center.x, this.center.y, this.radius-this.GUI.w/40, 0, Math.PI*2, true);
+					stroke()
+				closePath()
+
+			}
+		}
+
+		this.drawLabel();
+		
+	}
+}
+
+button.prototype.click = function(e) {
+	if (drawing.isInside(this.clickPos,{x: this.center.x-this.radius, y:this.center.y-this.radius, w:this.radius*2, h:this.radius*2})) {
+		this.val["press"] = 1;
+		if (this.mode=="aftertouch") {
+			this.val["x"] = this.clickPos.x;
+			this.val["y"] = this.clickPos.y;
+		}
+		this.transmit(this.val);
+		this.draw();
+	}
+}
+
+button.prototype.move = function () {
+	// use to track movement on the button
+	if (this.mode=="aftertouch") {
+		this.val["x"] = this.clickPos.x;
+		this.val["y"] = this.clickPos.y;
+		this.subval["x"] = this.clickPos.x;
+		this.subval["y"] = this.clickPos.y;
+		this.transmit(this.subval);
+		this.draw();
+	}
+}
+
+button.prototype.release = function() {
+	this.val["press"] = 0;
+	if (this.mode=="toggle" || this.mode=="aftertouch") { 
+		this.transmit(this.val);
+	}
+	this.draw();
+}
+
+
+/** @method setImage 
+	Turns the button into an image button with custom image. Sets the default (unclicked) button image.
+	@param {string} [src] Image source */
+button.prototype.setImage = function(image) {
+	this.image = new Image();
+	this.image.onload = this.draw.bind(this)
+	this.image.src = image;
+}
+
+button.prototype.setHoverImage = function(image) {
+	this.imageHover = new Image();
+	this.imageHover.onload = this.draw.bind(this)
+	this.imageHover.src = image;
+}
+
+/** @method setTouchImage 
+	Sets the image that will show when the button is clicked.
+	@param {string} [src] Image source */
+button.prototype.setTouchImage = function(image) {
+	this.imageTouch = new Image();
+	this.imageTouch.onload = this.draw.bind(this)
+	this.imageTouch.src = image;
+}
+},{"../core/widget":3,"../utils/drawing":5,"util":51}],11:[function(require,module,exports){
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class colors      
+	Color picker that outputs RBG values
+	```html
+	<canvas nx="colors"></canvas>
+	```
+	<canvas nx="colors" style="margin-left:25px"></canvas>
+*/
+				
+var colors = module.exports = function (target) {
 	
-	var math = _interopRequire(__webpack_require__(5));
+	this.defaultSize = { width: 100, height: 100 };	
+	widget.call(this, target);
+
+	this.init();
 	
-	var Rack = _interopRequire(__webpack_require__(37));
+}
+util.inherits(colors, widget);
+
+colors.prototype.init = function() {
+
+	/* new tactic */
+
+	this.gradient1 = this.context.createLinearGradient(0,0,this.GUI.w,0)
+ 	this.gradient1.addColorStop(0, '#F00'); 
+ 	this.gradient1.addColorStop(0.17, '#FF0'); 
+ 	this.gradient1.addColorStop(0.34, '#0F0'); 
+ 	this.gradient1.addColorStop(0.51, '#0FF'); 
+ 	this.gradient1.addColorStop(0.68, '#00F'); 
+ 	this.gradient1.addColorStop(0.85, '#F0F'); 
+ 	this.gradient1.addColorStop(1, '#F00'); 
+
+	this.gradient2 = this.context.createLinearGradient(0,0,0,this.GUI.h)
+ 	this.gradient2.addColorStop(0, 'rgba(0,0,0,255)'); 
+ 	this.gradient2.addColorStop(0.49, 'rgba(0,0,0,0)'); 
+ 	this.gradient2.addColorStop(0.51, 'rgba(255,255,255,0)'); 
+ 	this.gradient2.addColorStop(0.95, 'rgba(255,255,255,255)'); 
+
+	this.draw();
+}
+
+colors.prototype.draw = function() {
+	this.erase();
+
+	with(this.context) {
+		fillStyle = this.gradient1;
+		fillRect(0,0,this.GUI.w,this.GUI.h)
+		fillStyle = this.gradient2;
+		fillRect(0,0,this.GUI.w,this.GUI.h)
+	}
+
+	this.drawLabel();
+}
+
+colors.prototype.drawColor = function() {
+	with(this.context) {
+		fillStyle = "rgb("+this.val.r+","+this.val.g+","+this.val.b+")"
+		fillRect(0,this.GUI.h * 0.95,this.GUI.w,this.GUI.h* 0.05)
+
+	}
+}
+
+colors.prototype.click = function(e) {
+	if (this.clickPos.x > 0 && this.clickPos.y > 0 && this.clickPos.x < this.GUI.w && this.clickPos.y < this.GUI.h) {
+		var imgData = this.context.getImageData(this.clickPos.x*2,this.clickPos.y*2,1,1);
+	} else {
+		return;
+	}
 	
-	var Tune = _interopRequire(__webpack_require__(39));
+
+	/** @property {object}  val  RGB color value at mouse position. <br> This is also the widget's data output (See <a href="#nexusui-api-widget-widgetval">widget.val</a>). <br> Properties:
+	| &nbsp; | data
+	| --- | ---
+	| *r* | red value 0-256
+	| *g* | green value 0-256
+	| *b* | blue value 0-256 
+	```js 
+	colors1.on('*', function(data) {
+		// some code using data.r, data.g, and data.b
+	}
+	```
+	*/
+
+	this.val = {
+		r: imgData.data[0], 
+		g: imgData.data[1], 
+		b: imgData.data[2]
+	}
+	this.transmit(this.val);
+	this.drawColor();
+}
+
+
+colors.prototype.move = function(e) {
+	this.click(e);
+}
+},{"../core/widget":3,"util":51}],12:[function(require,module,exports){
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class comment      
+	Text comment
+	```html
+	<canvas nx="comment"></canvas>
+	```
+	<canvas nx="comment" style="margin-left:25px"></canvas>
+*/
+
+var comment = module.exports = function (target) {
 	
-	var Transform = _interopRequireWildcard(__webpack_require__(38));
-	
-	var Counter = __webpack_require__(28);
-	var Radio = __webpack_require__(40);
-	var Drunk = __webpack_require__(27);
-	var Sequence = __webpack_require__(26);
-	var Matrix = __webpack_require__(25);
-	
-	var WAAClock = _interopRequire(__webpack_require__(41));
-	
-	var Interval = _interopRequire(__webpack_require__(44));
-	
-	/**
-	NexusUI => created as Nexus
+	this.defaultSize = { width: 100, height: 20 };
+	widget.call(this, target);
+
+	/** @property {object}  val   
+		| &nbsp; | data
+		| --- | ---
+		| *text* | text of comment area (as string)
+		```js 
+		comment1.val.text = "This is my comment"
+		comment1.draw()
+		```
 	*/
 	
-	var NexusUI = (function () {
-	  function NexusUI(context) {
-	    _classCallCheck(this, NexusUI);
+	this.val = {
+		text: "comment"
+	}
+	this.sizeSet = false;
+
+	this.init();
+}
+util.inherits(comment, widget);
+
+/** @method setSize
+	Set the font size of the comment text
+	@param {integer} [size] Text size in pixels
+*/
+comment.prototype.setSize = function(size) {
+	this.size = size;
+	this.sizeSet = true;
+	this.draw();
+}
+
+comment.prototype.init = function() {
+	this.draw();
+}
+
+comment.prototype.draw = function() {
+	if (!this.sizeSet) {
+		this.size = Math.sqrt((this.GUI.w * this.GUI.h) / (this.val.text.length*2));
+	}
+
+	this.erase();
+	with (this.context) {
+		
+		fillStyle = this.colors.fill;
+		fillRect(0,0,this.GUI.w,this.GUI.h);
+		
+		fillStyle = this.colors.black;
+		textAlign = "left";
+		font = this.size+"px 'Open Sans'";
+	}
+	this.wrapText(this.val.text, 6, 3+this.size, this.GUI.w-6, this.size);
+}
+},{"../core/widget":3,"util":51}],13:[function(require,module,exports){
+var math = require('../utils/math')
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class crossfade      
+	Crossfade for panning or mixing
+	```html
+	<canvas nx="crossfade"></canvas>
+	```
+	<canvas nx="crossfade" style="margin-left:25px"></canvas>
+*/
+
+var crossfade = module.exports = function (target) {
+	this.defaultSize = { width: 100, height: 30 };
+	widget.call(this, target);
+
+	/** @property {object}  val   
+		| &nbsp; | data
+		| --- | ---
+		| *value* | Crossfade value (float -1 to 1)
+	*/
+	this.val = {
+		R: 0.75,
+		L: 0.75
+	}
+
+	this.location = 0.5
+
+	this.init();
+}
+util.inherits(crossfade, widget);
+
+crossfade.prototype.init = function() {
+	this.draw();
+}
+
+crossfade.prototype.draw = function() {
 	
-	    for (var key in Interfaces) {
-	      this[key] = Interfaces[key];
-	    }
+	this.erase();
+
+	this.location = Math.pow(this.val.R,2)
+		
+	with (this.context) {
+
+		fillStyle = this.colors.fill;
+		fillRect(0,0,this.GUI.w,this.GUI.h);
+
+		var y1 = 0;
+		var y2 = this.GUI.h;
+		var x1 = this.location*this.GUI.w;
+		//var x2 = this.GUI.w/5;
+		//
+		fillStyle = this.colors.accent;
+		fillRect(x1,y1,this.GUI.w-x1,y2);
+
+		textBaseline="middle"
+		font = this.GUI.h/3 + "px 'Open Sans'"
+
+		fillStyle = this.colors.accent;
+		textAlign="right"
+		fillText(this.val.R.toFixed(2), x1-2, this.GUI.h/4)
+
+		fillStyle = this.colors.fill;
+		textAlign="left"
+		fillText(this.val.L.toFixed(2), x1+2, this.GUI.h* 0.75)
+
+
+	}
+
+	this.drawLabel()
 	
-	    for (var key in math) {
-	      this[key] = math[key];
-	    }
+}
+
+crossfade.prototype.click = function() {
+	this.move();
+}
+
+crossfade.prototype.move = function() {
+	var R = math.clip(this.clickPos.x/this.GUI.w,0,1)
+	var L = 1 - R
+	this.location = R
+	this.val.R = math.prune(Math.sqrt(R),3)
+	this.val.L = math.prune(Math.sqrt(L),3)
+	this.draw();
+	this.transmit(this.val);
+}
+},{"../core/widget":3,"../utils/math":6,"util":51}],14:[function(require,module,exports){
+var math = require('../utils/math');
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class dial      
+	Circular dial
+	```html
+	<canvas nx="dial"></canvas>
+	```
+	<canvas nx="dial" style="margin-left:25px"></canvas>
+*/
+
+var dial = module.exports = function(target) {
 	
-	    var Core = {
-	      Rack: Rack
-	    };
+	this.defaultSize = { width: 100, height: 100 };
+	widget.call(this, target);
 	
-	    var Models = {
-	      Counter: Counter,
-	      Radio: Radio,
-	      Drunk: Drunk,
-	      Sequence: Sequence,
-	      Matrix: Matrix
-	    };
+	//define unique attributes
+	this.circleSize;
+	this.handleLength;
+
+	/** @property {object}  val
+	    | &nbsp; | data
+		| --- | ---
+		| *value* | Current value of dial as float 0-1
+	*/
+	this.val = {
+		value: 0
+	}
+	/** @property {float}  responsivity    How much the dial increments on drag. Default: 0.004<br>
+	*/
+	this.responsivity = 0.004;
 	
-	    for (var key in Models) {
-	      this[key] = Models[key];
-	    }
+	this.aniStart = 0;
+	this.aniStop = 1;
+	this.aniMove = 0.01;
+
+	this.lockResize = true;
+
+  if (this.canvas.getAttribute("min")!=null) {
+    this.min = parseFloat(this.canvas.getAttribute("min"));
+  } else {
+  	this.min = 0
+  }
+  if (this.canvas.getAttribute("max")!=null) {
+    this.max = parseFloat(this.canvas.getAttribute("max"));
+  } else {
+  	this.max = 1
+  }
+  if (this.canvas.getAttribute("step")!=null) {
+    this.step = parseFloat(this.canvas.getAttribute("step"));
+  } else {
+  	this.step = 0.001
+  }
+
+	this.maxdigits = 3
+	this.calculateDigits = nx.calculateDigits
+
+	this.init();
 	
-	    for (var key in Core) {
-	      this[key] = Core[key];
-	    }
+}
+
+util.inherits(dial, widget);
+
+dial.prototype.init = function() {
+
+	this.circleSize = (Math.min(this.center.x, this.center.y));
+	this.handleLength = this.circleSize;
+	this.mindim = Math.min(this.GUI.w,this.GUI.h)
 	
-	    var DefaultContext = window.AudioContext || window.webkitAudioContext;
-	    this._context = context || new DefaultContext();
+	if (this.mindim<101 || this.mindim<101) {
+		this.accentWidth = this.lineWidth * 1;
+	} else {
+		this.accentWidth = this.lineWidth * 2;
+	}
 	
-	    this.tune = new Tune();
-	    this.note = this.tune.note.bind(this.tune);
+	this.draw();
+
+}
+
+dial.prototype.draw = function() {
+
+	var normalval = this.normalize(this.val.value)
+
+	//var dial_angle = (((1.0 - this.val.value) * 2 * Math.PI) + (1.5 * Math.PI));
+	var dial_position = (normalval + 0.25) * 2 * Math.PI
+	//var point = math.toCartesian(this.handleLength, dial_angle);
+
+	this.erase();
 	
-	    this.clock = new WAAClock(this._context);
-	    this.clock.start();
-	    this.Interval = Interval;
+	with (this.context) {
+		
+		lineCap = 'butt';
+		beginPath();
+			lineWidth = this.circleSize/2;
+			arc(this.center.x, this.center.y, this.circleSize-lineWidth/2, Math.PI * 0, Math.PI * 2, false);
+			strokeStyle = this.colors.fill;
+			stroke();
+		closePath(); 
+
+		//draw round accent
+		lineCap = 'butt';
+		beginPath();
+			lineWidth = this.circleSize/2;
+			arc(this.center.x, this.center.y, this.circleSize-lineWidth/2, Math.PI * 0.5, dial_position, false);
+			strokeStyle = this.colors.accent;
+			stroke();
+		closePath(); 
+
+		clearRect(this.center.x-this.GUI.w/40,this.center.y,this.GUI.w/20,this.GUI.h/2)
+
+		if (normalval > 0) {
+			beginPath();
+			lineWidth = 1.5;
+			moveTo(this.center.x-this.GUI.w/40,this.center.y+this.circleSize/2) //this.radius-this.circleSize/4
+			lineTo(this.center.x-this.GUI.w/40,this.center.y+this.circleSize) //this.radius+this.circleSize/4
+			strokeStyle = this.colors.accent
+			stroke();
+			closePath();
+		}
+
+    //figure out text size
+    //
+    //
+    //
+    this.val.value = math.prune(this.rangify(normalval),3)
+		
+
+		//var valdigits = this.max ? Math.floor(this.max).toString().length : 1
+		//valdigits += this.step ? this.step < 1 ? 1 : 2 : 2
+		this.digits = this.calculateDigits()
+
+		valtextsize = (this.mindim / this.digits.total) * 0.55
+
+		if (valtextsize > 7) {
+
+	    var valtext = this.val.value.toFixed(this.digits.decimals)
+
+			fillStyle = this.colors.borderhl
+	    textAlign = "center"
+	    textBaseline = "middle"
+	    font = valtextsize+"px 'Open Sans'"
+	    fillText(valtext,this.GUI.w/2,this.GUI.h/2);
+
+	  }
+
+	}
+
+	this.drawLabel();
+}
+
+
+dial.prototype.click = function(e) {
+	this.val.value = math.prune(this.val.value, 4)
+	this.transmit(this.val);
+	this.draw();
+	this.aniStart = this.val.value;
+}
+
+
+dial.prototype.move = function() {	
+	var normalval = this.normalize(this.val.value)
+	normalval = math.clip((normalval - (this.deltaMove.y * this.responsivity)), 0, 1);
+	this.val.value = math.prune(this.rangify(normalval), 4)
+	this.transmit(this.val);
 	
-	    this.colors = {
-	      accent: "#2bb",
-	      fill: "#eee",
-	      light: "#fff",
-	      dark: "#333",
-	      mediumLight: "#ccc",
-	      mediumDark: "#666"
-	    };
+	this.draw();
+}
+
+
+dial.prototype.release = function() {
+	this.aniStop = this.val.value;
+}
+
+/** @method animate 
+	Animates the dial
+	@param {string} [type] Type of animation. Currently accepts "bounce" (bounces between mousedown and mouserelease points) or "none" */
+dial.prototype.animate = function(aniType) {
 	
-	    this.transform = Transform;
-	    this.add = Transform.add;
+	switch (aniType) {
+		case "bounce":
+			nx.aniItems.push(this.aniBounce.bind(this));
+			break;
+		case "none":
+			nx.aniItems.splice(nx.aniItems.indexOf(this.aniBounce));
+			break;
+	}
 	
-	    this.Add = {};
-	    for (var key in Interfaces) {
-	      this.Add[key] = Transform.add.bind(this, key);
-	    }
+}
+
+dial.prototype.aniBounce = function() {
+	if (!this.clicked) {
+		this.val.value += this.aniMove;
+		if (this.aniStop < this.aniStart) {
+			this.stopPlaceholder = this.aniStop;
+			this.aniStop = this.aniStart;
+			this.aniStart = this.stopPlaceholder;
+		}
+		this.aniMove = math.bounce(this.val.value, this.aniStart, this.aniStop, this.aniMove);	
+		this.draw();
+		this.val.value = math.prune(this.val.value, 4)
+		this.transmit(this.val);
+	}
+}
+
+
+},{"../core/widget":3,"../utils/math":6,"util":51}],15:[function(require,module,exports){
+var startTime = 0;
+
+var math = require('../utils/math')
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class envelope      
+	Multi-point line ramp generator
+	```html
+	<canvas nx="envelope"></canvas>
+	```
+	<canvas nx="envelope" style="margin-left:25px"></canvas>
+*/
+
+var envelope = module.exports = function (target) {
+	this.defaultSize = { width: 200, height: 100 };
+	widget.call(this, target);
 	
-	    /* create default component size */
-	    /* jshint ignore:start */
-	    var existingStylesheets = document.getElementsByTagName("style");
-	    var defaultSizeDeclaration = "[nexus-ui]{height:5000px;width:5000px}";
-	    var defaultStyleNode = document.createElement("style");
-	    defaultStyleNode.type = "text/css";
-	    defaultStyleNode.innerHTML = defaultSizeDeclaration;
-	    if (existingStylesheets.length > 0) {
-	      var parent = existingStylesheets[0].parentNode;
-	      parent.insertBefore(defaultStyleNode, existingStylesheets[0]);
+	this.nodeSize = 1;
+	/** @property {boolean} active Whether or not the envelope is currently animating. */
+	this.active = false;
+	/** @property {integer} duration The envelope's duration in ms. */
+	this.duration = 1000; // 1000 ms
+	/** @property {boolean} looping Whether or not the envelope loops. */
+	this.looping = false
+
+
+	this.scanIndex = 0
+
+	//define unique attributes
+	
+	/** @property {object}  val   
+		| &nbsp; | data
+		| --- | ---
+		| *amp* | amplitude at current point of ramp (float 0-1)
+		| *index* | current progress through ramp (float 0-1)
+		| *points* | array containing x/y coordinates of each node.
+	*/
+
+	this.val = {
+		index: 0,
+		amp: 0,
+		points: [
+			{
+				x: 0.1,
+				y: 0.4
+			},
+			{
+				x: 0.35,
+				y: 0.6
+			},
+			{
+				x: 0.65,
+				y: 0.2
+			},
+			{
+				x: 0.9,
+				y: 0.4
+			}
+		]
+	}
+
+	// Index of which node was clicked
+	this.selectedNode = null;
+
+	nx.aniItems.push(this.pulse.bind(this));
+
+	this.init();
+}
+
+util.inherits(envelope, widget);
+
+envelope.prototype.init = function() {
+	this.mindim = this.GUI.w < this.GUI.h ? this.GUI.w : this.GUI.h;
+	this.draw();
+}
+
+envelope.prototype.draw = function() {
+	this.erase();
+	with (this.context) {
+		fillStyle = this.colors.fill;
+		fillRect(0,0,this.GUI.w,this.GUI.h);
+		fillStyle = this.colors.accent;
+		var centerx = this.mindim/10
+		var centery = this.GUI.h-this.mindim/10
+		beginPath()
+			moveTo(centerx,centery)
+			arc(centerx,centery,this.mindim/10,Math.PI*1.5,Math.PI*2*this.val.index+Math.PI*1.5,false);
+			fill()
+		closePath()
+
+		// draw all the points
+		var drawingX = [];
+		var drawingY = [];
+
+		for (var i = 0; i < this.val.points.length; i++) {
+			drawingX[i] = this.val.points[i].x * this.GUI.w;
+			drawingY[i] = (1 - this.val.points[i].y) * this.GUI.h;
+
+			//stay within right/left bounds
+			if (drawingX[i]<(this.bgLeft+this.nodeSize)) {
+				drawingX[i] = this.bgLeft + this.nodeSize;
+			} else if (drawingX[i]>(this.bgRight-this.nodeSize)) {
+				drawingX[i] = this.bgRight - this.nodeSize;
+			}
+			//stay within top/bottom bounds
+			if (drawingY[i]<(this.bgTop+this.nodeSize)) {
+				drawingY[i] = this.bgTop + this.nodeSize;
+			} else if (drawingY[i]>(this.bgBottom-this.nodeSize)) {
+				drawingY[i] = this.bgBottom - this.nodeSize;
+			}
+		}
+
+		// draw rectangles
+		for (var j = 0; j < drawingX.length; j++) {
+			var size = this.mindim/35 + 2;
+			beginPath()
+			arc(drawingX[j],drawingY[j],size,0,Math.PI*2,false);
+			fillStyle = this.colors.accent
+			fill()
+			closePath()
+		}
+
+
+		// draw shape
+		beginPath();
+			strokeStyle = this.colors.accent;
+			moveTo(-5,this.GUI.h);
+			lineTo(-5,(1-this.val.points[0].y)*this.GUI.h);
+
+			// draw each line
+			for (var j = 0; j < drawingX.length; j++) {
+				lineTo(drawingX[j],drawingY[j]);
+			}
+
+			lineTo(this.GUI.w+5,(1-this.val.points[this.val.points.length-1].y)*this.GUI.h);
+			lineTo(this.GUI.w+5,this.GUI.h);
+			stroke();
+			globalAlpha = 0.2;
+			fillStyle = this.colors.accent;
+			fill();
+			globalAlpha = 1
+		closePath();
+	
+
+
+	}
+	
+	this.drawLabel();
+}
+
+envelope.prototype.scaleNode = function(nodeIndex) {
+	var i = nodeIndex;
+	var prevX = 0;
+	var nextX = this.GUI.w;
+	
+	var actualX = this.val.points[i].x;
+	var actualY = (this.GUI.h - this.val.points[i].y);
+	var clippedX = math.clip(actualX/this.GUI.w, 0, 1);
+	var clippedY = math.clip(actualY/this.GUI.h, 0, 1);
+
+	this.val.points[i].x = math.prune(clippedX, 3);
+	this.val.points[i].y = math.prune(clippedY, 3);
+
+	// find x value of nodes to the right and left
+	if (i > 0) {
+		prevX = this.val.points[i-1].x;
+	}
+	if (this.val.points.length > i+1) {
+		nextX = this.val.points[i+1].x;
+	}
+
+	if (this.val.points[i].x < prevX) {
+		this.val.points.splice(i-1, 0, this.val.points.splice(i, 1)[0])
+		i = i-1;
+		this.selectedNode = i;
+	}
+
+	if (this.val.points[i].x > nextX) {
+		this.val.points.splice(i+1, 0, this.val.points.splice(i, 1)[0])
+		i = i+1;
+		this.selectedNode = i;
+	}
+
+}
+
+envelope.prototype.click = function() {
+
+	// find nearest node and set this.selectedNode (index)
+	this.selectedNode = this.findNearestNode(this.clickPos.x/this.GUI.w, this.clickPos.y/this.GUI.h, this.val.points);
+
+	this.transmit(this.val);
+	this.draw();
+}
+
+envelope.prototype.move = function() {
+	if (this.clicked) {
+		this.val.points[this.selectedNode].x = this.clickPos.x;
+		this.val.points[this.selectedNode].y = this.clickPos.y;
+		this.scaleNode(this.selectedNode);
+		this.transmit(this.val);
+		this.draw();
+	}
+}
+
+envelope.prototype.release = function() {
+
+	if (!this.hasMoved) {
+		this.val.points.splice(this.selectedNode,1)
+	}
+
+	this.draw();
+
+	// reset the this.selectedNode
+	this.selectedNode = null;
+}
+
+// update index and amp
+envelope.prototype.pulse = function() {
+	if (this.active) {
+
+		// calculate index based on audio context
+		var percentDone = (nx.context.currentTime - startTime) / (this.duration/1000);
+		if (percentDone >= 1) {
+			if (this.looping) {
+				percentDone -= 1;
+				startTime += this.duration/1000;
+				this.val.index = 0
+				this.scanIndex = 0
+			} else {
+				this.stop();
+			}
+			
+		}
+		this.val.index = percentDone;
+	
+		if (this.val.index > this.val.points[this.val.points.length-1].x) {
+			this.val.amp = this.val.points[this.val.points.length-1].y
+		} else if (this.val.index < this.val.points[0].x) {
+			this.val.amp = this.val.points[0].y
+		} else {				
+			this.scanIndex = 0;
+			while (this.val.index > this.val.points[this.scanIndex].x) {
+				this.scanIndex++;
+			}
+
+			var nextPX = this.val.points[this.scanIndex].x;
+			var prevPX = this.val.points[this.scanIndex-1].x;
+			var nextPY = this.val.points[this.scanIndex].y;
+			var prevPY = this.val.points[this.scanIndex-1].y;
+		
+			this.val.amp = math.interp((this.val.index-prevPX)/(nextPX - prevPX),prevPY,nextPY);
+
+		}
+	
+		this.transmit(this.val);
+		this.draw();
+	}
+}
+
+/** @method start
+	Start ramp from beginning. If set to loop, will loop the ramp until stopped. */
+envelope.prototype.start = function() {
+	this.active = true;
+	this.val.index = 0;
+	
+	// set startTime
+	startTime = nx.context.currentTime;
+}
+
+/** @method stop
+	Stop the ramp and set progress to 0. */
+envelope.prototype.stop = function() {
+	this.active = false;
+	this.val.index = 0;
+	this.draw();
+}
+
+envelope.prototype.findNearestNode = function(x, y, nodes) {
+	var nearestIndex = null;
+	var nearestDist = 1000;
+	var before = false;
+	y = 1 - y;
+	for (var i = 0; i<nodes.length; i++) {
+		var distance = Math.sqrt(  Math.pow( (nodes[i].x - x), 2), Math.pow((nodes[i].y - (-y)), 2) );
+
+		if (distance < nearestDist) {
+			nearestDist = distance;
+			nearestIndex = i;
+			before = x > nodes[i].x
+		}
+	}
+
+	if (nearestDist>.1) {
+		if (before) { nearestIndex++ }
+		this.val.points.splice(nearestIndex,0,{
+			x: this.clickPos.x/this.GUI.w,
+			y: (this.GUI.h-this.clickPos.y)/this.GUI.h
+		})
+		//nearestIndex++;
+	}
+
+	return nearestIndex;
+}
+},{"../core/widget":3,"../utils/math":6,"util":51}],16:[function(require,module,exports){
+var math = require('../utils/math')
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class ghost (alpha) 
+	Interface gesture capture / playback (in development)    
+	
+	```html
+	<canvas nx="ghost"></canvas>
+	```
+	<canvas nx="ghost" style="margin-left:25px"></canvas>
+*/
+
+var ghost = module.exports = function(target) {
+	
+	this.defaultSize = { width: 100, height: 50 };
+	widget.call(this, target);
+	
+	//define unique attributes
+	this.recording = false;
+	this.playing = false;
+	this.maxLength = 2000;
+	this.components = new Array();
+	this.buffer = new Array();
+	//this.moment is for the record head
+	this.moment = 0;
+	//this.needle is for the playback head
+	this.needle = 0;
+	this.val = new Object();
+	this.rate = 1;
+	this.start = 0;
+	this.end = 1;
+	this.size = 0;
+	this.looping = true;
+	this.boundLog = this.log.bind(this)
+	this.direction = 1;
+	//settings
+	this.noise = 0;
+	this.loopstart = 0;
+	this.loopend = 0;
+	this.mode = "linear";   // linear,bounce,random,wander,pattern/dream
+	//init
+	this.init();
+
+	this.boundAdv = this.advance.bind(this);
+	nx.aniItems.push(this.boundAdv)
+
+}
+
+util.inherits(ghost, widget);
+
+
+ghost.prototype.init = function() {
+	this.draw();
+}
+
+ghost.prototype.watch = function() {
+}
+	
+	//sets a new component to be recorded
+ghost.prototype.connect = function(target) {
+	var compIndex = this.components.length;
+	this.components.push(target);
+	target.tapeNum = compIndex;
+	target.isRecording = true;
+	target.recorder = this;
+	this.buffer[compIndex] = new Object();
+	for (var key in target.val) {
+		this.buffer[compIndex][key] = new Array();
+	}
+	
+}
+	
+	//the actual recording function
+ghost.prototype.write = function(index, val) {
+	if (this.moment>=this.maxLength) {
+		this.stop();
+	}
+	for (var key in val) {
+		if (this.buffer[index][key]) {
+			// if an array or object, must make a copy, otherwise it is a reference to the original and will not record properly
+			if (typeof val[key] == "object") {
+				if (Array.isArray(val[key])) {
+				//	this.buffer[index][key][this.moment] = val[key].slice()
+				//	above line should work, but is still only a reference, not a copy
+					this.buffer[index][key][this.moment] = JSON.parse(JSON.stringify(val[key]))
+				} else {
+					this.buffer[index][key][this.moment] = {}
+					for (var subkey in val[key]) {
+						this.buffer[index][key][this.moment][subkey] = val[key][subkey]
+					}
+				}
+			} else {
+				this.buffer[index][key][this.moment] = val[key];
+			}
+		}
+	}
+	this.draw();
+}
+	
+
+ghost.prototype.draw = function() {
+
+	with (this.context) {
+		fillStyle = this.colors.fill;
+		fillRect(0,0,this.GUI.w,this.GUI.h)
+	}
+
+	var quad = this.GUI.w/4;
+	var quad2 = this.GUI.w-quad;
+	
+	if (!this.recording) {
+		with (this.context) {
+			fillStyle = "#e33";
+			beginPath()
+			arc(quad,this.GUI.h/2,quad*0.8,0,Math.PI*2)
+			fill()
+			closePath();
+			textAlign = "center"
+			textBaseline = "middle"
+			font = "normal "+this.GUI.h/6+"px courier"
+			fillStyle = this.colors.fill
+			fillText("rec",quad,this.GUI.h/2)
+		}
+	} else {
+		with (this.context) {
+			fillStyle = "#e33";
+			fillRect(quad*0.4,quad*0.4,quad*1.2,quad*1.2)
+		}
+	}
+	
+	if (!this.playing) {
+		with (this.context) {
+			fillStyle = this.colors.border
+			beginPath()
+			arc(quad2,this.GUI.h/2,quad*0.8,0,Math.PI*2)
+			fill()
+			closePath()
+			textAlign = "center"
+			textBaseline = "middle"
+			font = "normal "+this.GUI.h/6+"px courier"
+			fillStyle = this.colors.fill
+			fillText("play",quad2,this.GUI.h/2)
+		}
+	} else {
+		with (this.context) {
+			strokeStyle = this.colors.border
+			lineWidth = this.GUI.w/30
+			beginPath()
+			arc(quad2,this.GUI.h/2,quad*0.8,0,Math.PI*2)
+			stroke()
+			closePath()
+			var sec = ~~(this.needle/30)
+			textAlign = "center"
+			textBaseline = "middle"
+			font = "normal "+this.GUI.h/3+"px courier"
+			fillStyle = this.colors.border
+			fillText(sec,quad2,this.GUI.h/2+2)
+		}
+	}
+}
+
+ghost.prototype.record = function() {
+	if (!this.playing) {
+		this.components = new Array();
+		for (var key in nx.widgets) {
+			this.connect(nx.widgets[key]);
+		}
+	}
+	this.moment = 0;
+	nx.aniItems.push(this.boundLog)
+	this.recording = true;
+}
+
+ghost.prototype.log = function() {
+	for (var i=0;i<this.components.length;i++) {
+		var sender = this.components[i];
+		this.write(this.components[i].tapeNum,this.components[i].val);
+	}
+	this.moment++;
+}
+
+ghost.prototype.stop = function() {
+	nx.removeAni(this.boundLog);
+	this.size = this.moment;
+	this.recording = false;
+
+/*	for ()
+	for (var j=0;j<this.buffer[sender.tapeNum][key].length;j++) {
+		if (this.buffer[sender.tapeNum][key][j] != this.buffer[sender.tapeNum][key][0]) {
+			changed = true;
+			console.log(key + " changes")
+			break;
+		}
+	} */
+
+	this.draw();
+}
+
+
+ghost.prototype.scan = function(x) {
+
+	this.pneedle = this.needle - this.direction
+	if (this.pneedle <= 0) {
+		this.pneedle = this.size-1
+	} else if (this.pneedle >= this.size-1) {
+		this.pneedle = 0
+	}
+
+
+	// loop through the widgets that were recorded
+	for (var i=0;i<this.components.length;i++) {
+		//sender is the current widget we're looking at
+		var sender = this.components[i];
+		//loop through the widget's gesture buffer
+		for (var key in this.buffer[sender.tapeNum]) {
+			if (this.buffer[sender.tapeNum][key]) {
+
+				//create a new val object
+				var val = new Object();
+				//make sure we're not looking out of bounds of the buffer
+				var max = this.buffer[sender.tapeNum][key][~~this.needle+1] ? this.buffer[sender.tapeNum][key][~~this.needle+1] : this.buffer[sender.tapeNum][key][~~this.needle]
+
+			//	var changed = false;
+
+				//is this value the first
+		/*		if (this.buffer[sender.tapeNum][key][~~this.needle-this.direction] == undefined) {
+			
+					for (var j=0;j<this.buffer[sender.tapeNum][key].length;j++) {
+						if (this.buffer[sender.tapeNum][key][j] != this.buffer[sender.tapeNum][key][0]) {
+							changed = true;
+							break;
+						}
+					}
+				} else if (this.buffer[sender.tapeNum][key][~~this.needle] != this.buffer[sender.tapeNum][key][~~this.needle-this.direction]) {
+					changed = true;
+				} */
+
+
+
+				if (this.buffer[sender.tapeNum][key][~~this.needle] != this.buffer[sender.tapeNum][key][~~this.pneedle]) {
+	
+					// if it's a number, interpolate
+					if (typeof this.buffer[sender.tapeNum][key][~~this.needle] == "number") {
+						// create the value pair
+						val[key] = nx.interp(this.needle - ~~this.needle, this.buffer[sender.tapeNum][key][~~this.needle], max)
+						val[key] += Math.random() * this.noise - this.noise/2;
+						val[key] = nx.clip(val[key],0,1)
+						//set the widget with the value from the buffer
+						sender.set(val, true)
+					} else {
+						// otherwise, transfer the closest val as is
+						val[key] = this.buffer[sender.tapeNum][key][~~this.needle]
+						sender.set(val, true)
+						
+					}
+
+					
+				}
+			}
+		}
+	}
+}
+
+
+
+//this.moment is for the record head
+//this.needle is for the playback head
+
+ghost.prototype.play = function(rate,start,end) {
+	rate ? this.rate = rate : false;
+	if (start || this.start) {
+		//this.needle = this.moment-1;
+		this.start = start ? start : this.start;
+		this.needle = this.start
+	} else {
+		this.needle = this.moment-1;
+		this.start = 0;
+	} 
+	if (this.mode=="linear") {
+		this.direction = 1;
+	}
+	end ? this.end = end : this.end = 1
+	this.playing = true;
+}
+
+ghost.prototype.pause = function() {
+	this.playing = false;
+}
+
+ghost.prototype.loop = function() {
+	
+}
+
+ghost.prototype.advance = function() {
+	if (this.playing) {
+		if (this.mode == "linear" || this.mode == "bounce") {
+			this.needle += this.rate*this.direction;
+		} else if (this.mode=="random") {
+			this.needle = nx.random((this.end-this.start)*this.size)+this.start*this.size;
+		} else if (this.mode=="wander") {
+			var dir = 3
+			this.needle > this.size*0.75 ? dir-- : null;
+			this.needle < this.size*0.25 ? dir++ : null;
+			this.needle += this.rate*this.direction * (nx.random(dir)-1);
+		}
+
+		if (this.needle/this.size < this.end && this.needle/this.size >= this.start) {
+			this.scan();
+		} else if (this.looping) {
+			if (this.mode=="linear") {
+				this.needle = this.start*this.size;
+			} else {
+				this.direction = this.direction * -1
+			}
+		} else {
+			this.playing = false;
+		}
+		this.draw();
+	}
+}
+	
+
+ghost.prototype.click = function(e) {
+	if (this.clickPos.x<this.GUI.w/2) {
+		if (this.recording) {
+			this.stop()
+		} else {
+			this.pause()
+			this.record()
+		}
+	} else {
+		if (this.playing) {
+			this.pause();
+		} else {
+			this.play();
+		}
+		this.draw();
+	}
+}
+},{"../core/widget":3,"../utils/math":6,"util":51}],17:[function(require,module,exports){
+var math = require('../utils/math')
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class ghostlist (alpha) 
+	Interface gesture capture / playback (in development)    
+	
+	```html
+	<canvas nx="ghostlist"></canvas>
+	```
+	<canvas nx="ghostlist" style="margin-left:25px"></canvas>
+*/
+
+var ghostlist = module.exports = function(target) {
+	
+	this.defaultSize = { width: 100, height: 50 };
+	widget.call(this, target);
+	
+	//define unique attributes
+	this.recording = false;
+	this.playing = false;
+	this.maxLength = 2000;
+	this.components = new Array();
+	//the recording buffer
+	this.buffer = new Array();
+	//the playback info
+	this.playbuffer = []
+	this.playIndex = 0
+	this.playbufferSize = 0
+	//this.moment is for the record head
+	this.moment = 0;
+	//this.needle is for the playback head
+	this.needle = 0;
+	this.val = new Object();
+	this.rate = 1;
+	this.start = 0;
+	this.end = 1;
+	this.size = 0;
+	this.looping = true;
+	this.boundLog = this.log.bind(this)
+	this.direction = 1;
+	//settings
+	this.noise = 0;
+	this.loopstart = 0;
+	this.loopend = 0;
+	this.mode = "linear";   // linear,bounce,random,wander,pattern/dream
+	//init
+	this.init();
+
+	this.boundAdv = this.advance.bind(this);
+	nx.aniItems.push(this.boundAdv)
+
+}
+
+util.inherits(ghostlist, widget);
+
+
+ghostlist.prototype.init = function() {
+	this.draw();
+}
+
+ghostlist.prototype.watch = function() {
+}
+	
+	//sets a new component to be recorded
+ghostlist.prototype.connect = function(target) {
+	var compIndex = this.components.length;
+	this.components.push(target);
+	target.tapeNum = compIndex;
+	target.isRecording = true;
+	target.recorder = this;
+	this.buffer[compIndex] = new Object();
+	for (var key in target.val) {
+		this.buffer[compIndex][key] = new Array();
+	}
+	
+}
+	
+	//the actual recording function
+ghostlist.prototype.write = function(index, val) {
+	if (this.moment>=this.maxLength) {
+		this.stop();
+	}
+	for (var key in val) {
+		if (this.buffer[index][key]) {
+			/*if (!this.actuated) {
+				//if ignored because widget currently being set with .set
+				this.buffer[index][key][this.moment] = {}
+					for (var subkey in val[key]) {
+						this.buffer[index][key][this.moment][subkey] = val[key][subkey]
+					}
+
+			} else { */
+				// if an array or object, must make a copy, otherwise it is a reference to the original and will not record properly
+				if (typeof val[key] == "object") {
+					if (Array.isArray(val[key])) {
+					//	this.buffer[index][key][this.moment] = val[key].slice()
+					//	above line should work, but is still only a reference, not a copy
+						if (this.components[index].actuated) {
+							this.buffer[index][key][this.moment] = JSON.parse(JSON.stringify(val[key]))
+						} else {
+							this.buffer[index][key][this.moment] = false;
+						}
+					} else {
+						this.buffer[index][key][this.moment] = {}
+						for (var subkey in val[key]) {
+							if (this.components[index].actuated) {
+								this.buffer[index][key][this.moment][subkey] = val[key][subkey]
+							} else {
+								this.buffer[index][key][this.moment][subkey] = false;
+							}
+						}
+					}
+				} else {
+					
+					if (this.components[index].actuated) {
+						this.buffer[index][key][this.moment] = val[key];
+					} else {
+						this.buffer[index][key][this.moment] = false;
+					}
+				}
+		//	}
+		}
+	}
+	this.draw();
+}
+	
+
+ghostlist.prototype.draw = function() {
+
+	with (this.context) {
+		fillStyle = this.colors.fill;
+		fillRect(0,0,this.GUI.w,this.GUI.h)
+	}
+
+	var quad = this.GUI.w/4;
+	var quad2 = this.GUI.w-quad;
+	
+	if (!this.recording) {
+		with (this.context) {
+			fillStyle = "#e33";
+			beginPath()
+			arc(quad,this.GUI.h/2,quad*0.8,0,Math.PI*2)
+			fill()
+			closePath();
+			textAlign = "center"
+			textBaseline = "middle"
+			font = "normal "+this.GUI.h/6+"px courier"
+			fillStyle = this.colors.fill
+			fillText("rec",quad,this.GUI.h/2)
+		}
+	} else {
+		with (this.context) {
+			fillStyle = "#e33";
+			fillRect(quad*0.4,quad*0.4,quad*1.2,quad*1.2)
+		}
+	}
+	
+	if (!this.playing) {
+		with (this.context) {
+			fillStyle = this.colors.border
+			beginPath()
+			arc(quad2,this.GUI.h/2,quad*0.8,0,Math.PI*2)
+			fill()
+			closePath()
+			textAlign = "center"
+			textBaseline = "middle"
+			font = "normal "+this.GUI.h/6+"px courier"
+			fillStyle = this.colors.fill
+			fillText("play",quad2,this.GUI.h/2)
+		}
+	} else {
+		with (this.context) {
+			strokeStyle = this.colors.border
+			lineWidth = this.GUI.w/30
+			beginPath()
+			arc(quad2,this.GUI.h/2,quad*0.8,0,Math.PI*2)
+			stroke()
+			closePath()
+			var sec = ~~(this.needle/30)
+			textAlign = "center"
+			textBaseline = "middle"
+			font = "normal "+this.GUI.h/3+"px courier"
+			fillStyle = this.colors.border
+			fillText(sec,quad2,this.GUI.h/2+2)
+		}
+	}
+}
+
+ghostlist.prototype.record = function() {
+//	if (!this.playing) {
+		this.components = new Array();
+		for (var key in nx.widgets) {
+			this.connect(nx.widgets[key]);
+		}
+//	}
+	this.moment = 0;
+	nx.aniItems.push(this.boundLog)
+	this.recording = true;
+}
+
+ghostlist.prototype.log = function() {
+	for (var i=0;i<this.components.length;i++) {
+		var sender = this.components[i];
+		var val = {}
+		if (!sender.clicked) {
+			for (var key in sender.val) {
+				val[key] = false
+			}
+		} else {
+			val = sender.val
+			if (!jest.nexttitle) {
+				jest.nexttitle = sender.canvasID
+			}
+		}
+		this.write(this.components[i].tapeNum,val);
+	}
+	this.moment++;
+}
+
+ghostlist.prototype.stop = function() {
+	nx.removeAni(this.boundLog);
+	this.size = this.moment;
+	this.recording = false;
+	this.draw();
+}
+
+
+ghostlist.prototype.scan = function(x) {
+
+	// loop through the widgets that were recorded
+	for (var i=0;i<this.components.length;i++) {
+		//sender is the current widget we're looking at
+		var sender = this.components[i];
+		//loop through the widget's recorded val keys
+		for (var key in this.playbuffer[sender.tapeNum]) {
+
+			//console.log(this.playbuffer[sender.tapeNum][key])
+			//
+			//playbuffer is the whole buffer
+			//sender.tapeNum is the nx.widget index & this.component index
+			//[key] is the val property that was recorded, i.e. x and y for 
+			//so this returns an array for each val property. that array contains n moments of recorded data
+
+			if (this.playbuffer[sender.tapeNum][key]) {
+
+				//create a new val object
+				var val = new Object();
+				//make sure we're not looking out of bounds of the buffer
+				var max = this.playbuffer[sender.tapeNum][key][~~this.needle+1] ? this.playbuffer[sender.tapeNum][key][~~this.needle+1] : this.playbuffer[sender.tapeNum][key][~~this.needle]
+				//console.log("1")
+				if (this.playbuffer[sender.tapeNum][key][~~this.needle-this.direction] != undefined && this.playbuffer[sender.tapeNum][key][~~this.needle] !== this.playbuffer[sender.tapeNum][key][~~this.needle-this.direction]) {
+					// if it's a number, interpolate
+					if (typeof this.playbuffer[sender.tapeNum][key][~~this.needle] == "number") {
+						// create the value pair
+						val[key] = nx.interp(this.needle - ~~this.needle, this.playbuffer[sender.tapeNum][key][~~this.needle], max)
+						val[key] += Math.random() * this.noise - this.noise/2;
+						val[key] = nx.clip(val[key],0,1)
+						//set the widget with the value from the buffer
+						//console.log(val)
+						sender.set(val, true);
+					} else {
+						// otherwise, transfer the closest val as is
+						val[key] = this.playbuffer[sender.tapeNum][key][~~this.needle]
+						
+						if (val[key] || val[key]===0) {
+							//console.log(val)
+							sender.set(val, true)
+						}
+						
+					}
+				}
+			}
+		}
+	}
+}
+
+
+
+//this.moment is for the record head
+//this.needle is for the playback head
+
+ghostlist.prototype.play = function(rate,start,end) {
+	rate ? this.rate = rate : false;
+	if (start) {
+		this.needle = this.moment-1;
+		this.start = start;
+	} else {
+		this.needle = this.moment-1;
+		this.start = 0;
+	} 
+	if (this.mode=="linear") {
+		this.direction = 1;
+	}
+	end ? this.end = end : this.end = 1
+	this.playing = true;
+}
+
+ghostlist.prototype.pause = function() {
+	this.playing = false;
+}
+
+ghostlist.prototype.loop = function() {
+	
+}
+
+ghostlist.prototype.advance = function() {
+	if (this.playing) {
+		if (this.mode == "linear" || this.mode == "bounce") {
+			this.needle += this.rate*this.direction;
+		} else if (this.mode=="random") {
+			this.needle = nx.random((this.end-this.start)*this.playbufferSize)+this.start*this.playbufferSize;
+		} else if (this.mode=="wander") {
+			var dir = 3
+			this.needle > this.playbufferSize*0.75 ? dir-- : null;
+			this.needle < this.playbufferSize*0.25 ? dir++ : null;
+			this.needle += this.rate*this.direction * (nx.random(dir)-1);
+		}
+
+		if (this.needle/this.playbufferSize < this.end && this.needle/this.playbufferSize > this.start) {
+			this.scan();
+		} else if (this.looping) {
+			if (this.mode=="linear") {
+			//	this.needle = this.start*this.playbufferSize + 1;
+				this.needle = 0;
+				this.next = this.jest.next()
+				this.playbuffer = this.next.buffer
+				this.playbufferSize = this.next.len
+			} else {
+				this.direction = this.direction * -1
+			}
+		} else {
+			this.playing = false;
+		}
+		this.draw();
+		this.jest.drawvis(this.needle/this.playbufferSize)
+	}
+}
+	
+
+ghostlist.prototype.click = function(e) {
+	if (this.clickPos.x<this.GUI.w/2) {
+		if (this.recording) {
+			this.stop()
+		} else {
+			this.record()
+		}
+	} else {
+		if (this.playing) {
+			this.pause();
+		} else {
+			this.play();
+		}
+		this.draw();
+	}
+}
+},{"../core/widget":3,"../utils/math":6,"util":51}],18:[function(require,module,exports){
+module.exports = {
+  banner: require('./banner'),
+  button: require('./button'),
+  colors: require('./colors'),
+  comment: require('./comment'),
+  crossfade: require('./crossfade'),
+  dial: require('./dial'),
+  envelope: require('./envelope'),
+  ghost: require('./ghost'),
+  ghostlist: require('./ghostlist'),
+  joints: require('./joints'),
+  keyboard: require('./keyboard'),
+  matrix: require('./matrix'),
+  message: require('./message'),
+  meter: require('./meter'),
+  metro: require('./metro'),
+  metroball: require('./metroball'),
+  motion: require('./motion'),
+  mouse: require('./mouse'),
+  multislider: require('./multislider'),
+  multitouch: require('./multitouch'),
+  number: require('./number'),
+  panel: require('./panel'),
+  position: require('./position'),
+  range: require('./range'),
+  select: require('./select'),
+  slider: require('./slider'),
+  string: require('./string'),
+  tabs: require('./tabs'),
+  text: require('./text'),
+  tilt: require('./tilt'),
+  toggle: require('./toggle'),
+  trace: require('./trace'),
+  typewriter: require('./typewriter'),
+  vinyl: require('./vinyl'),
+  waveform: require('./waveform'),
+  wavegrain: require('./wavegrain'),
+  windows: require('./windows')
+}
+},{"./banner":9,"./button":10,"./colors":11,"./comment":12,"./crossfade":13,"./dial":14,"./envelope":15,"./ghost":16,"./ghostlist":17,"./joints":19,"./keyboard":20,"./matrix":21,"./message":22,"./meter":23,"./metro":24,"./metroball":25,"./motion":26,"./mouse":27,"./multislider":28,"./multitouch":29,"./number":30,"./panel":31,"./position":32,"./range":33,"./select":34,"./slider":35,"./string":36,"./tabs":37,"./text":38,"./tilt":39,"./toggle":40,"./trace":41,"./typewriter":42,"./vinyl":43,"./waveform":44,"./wavegrain":45,"./windows":46}],19:[function(require,module,exports){
+var math = require('../utils/math')
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class joints      
+	2D slider with connections to several points; a proximity-based multislider.
+	```html
+	<canvas nx="joints"></canvas>
+	```
+	<canvas nx="joints" style="margin-left:25px"></canvas>
+*/
+
+var joints = module.exports = function (target) {
+	this.defaultSize = { width: 150, height: 150 };
+	widget.call(this, target);
+	
+	/* @property {integer} nodeSize The size of the proximity points in pixels */
+	this.nodeSize = this.GUI.w/14; 
+	this.values = [0,0];
+
+	/** @property {object}  val  
+		| &nbsp; | data
+		| --- | ---
+		| *x* | x position of touch/mouse
+		| *y* | y position of touch/mouse
+		| *node0* | nearness to first node if within range (float 0-1)
+		| *node1* | nearness to second node if within range (float 0-1)
+		| *node2* | nearness to third node if within range (float 0-1)
+		| etc... | &nbsp;
+		
+	*/
+	this.val = {
+		x: 0.35,
+		y: 0.35,
+		node1: 0
+	}
+	/** @property {array} joints An array of objects with x and y properties detailing coordinates of each proximity node. Coordinates are 0-1 floats which are decimal fractions of the width and height.
+	```js
+		// The widget will now have 2 proximity points instead of 8
+		joints1.joints = [
+		&nbsp; { x: 0.5 , y: 0.2 },
+		&nbsp; { x: 0.5 , y: 0.7 }
+		]
+	```
+	 */
+	this.joints = [
+		{ x: .1, y: .2 },
+	    { x: .2, y: .1 },
+	    { x: .3, y: .7 },
+	    { x: .4, y: .4 },
+	    { x: .5, y: .9 },
+	    { x: .6, y: .15 },
+	    { x: .7, y: .3 },
+	    { x: .8, y: .8 },
+	]
+	this.threshold = this.GUI.w / 3;
+}
+util.inherits(joints, widget);
+
+joints.prototype.init = function() {
+  this.nodeSize = this.GUI.w/14;
+  this.threshold = this.GUI.w/3;
+  this.draw();
+}
+
+joints.prototype.draw = function() {
+	this.erase();
+
+	this.drawingX = this.val.x * this.GUI.w;
+	this.drawingY = this.val.y * this.GUI.h;
+
+	with (this.context) {
+		fillStyle = this.colors.fill;
+		fillRect(0,0,this.GUI.w,this.GUI.h);
+		if (this.val.x != null) {
+			this.drawNode();
+		}
+		else {
+			fillStyle = this.colors.border;
+			font = "14px courier";
+			fillText(this.default_text, 10, 20);
+		}	
+		fillStyle = this.colors.accent;
+		strokeStyle = this.colors.border;
+		for (var i in this.joints) {
+			beginPath();
+				arc(this.joints[i].x*this.GUI.w, this.joints[i].y*this.GUI.h, this.nodeSize/2, 0, Math.PI*2, true);					
+				fill();
+			closePath();
+			var cnctX = Math.abs(this.joints[i].x*this.GUI.w-this.drawingX);
+			var cnctY = Math.abs(this.joints[i].y*this.GUI.h-this.drawingY);
+			var strength = cnctX + cnctY;
+			if (strength < this.threshold) {
+				beginPath();
+					moveTo(this.joints[i].x*this.GUI.w, this.joints[i].y*this.GUI.h);
+					lineTo(this.drawingX,this.drawingY);
+					strokeStyle = this.colors.accent;
+					lineWidth = math.scale( strength, 0, this.threshold, this.nodeSize/2, 5 );
+					stroke();
+				closePath();
+				var scaledstrength = math.scale( strength, 0, this.threshold, 1, 0 );
+				this.val["node"+i] = scaledstrength;
+			}
+		}
+	}
+	
+	this.drawLabel();
+}
+
+joints.prototype.drawNode = function() {
+	//stay within right/left bounds
+	if (this.drawingX<(this.nodeSize)) {
+		this.drawingX = this.nodeSize;
+	} else if (this.drawingX>(this.GUI.w-this.nodeSize)) {
+		this.drawingX = this.GUI.w - this.nodeSize;
+	}
+	//stay within top/bottom bounds
+	if (this.drawingY < this.nodeSize) {
+		this.drawingY = this.nodeSize;
+	} else if (this.drawingY>(this.GUI.h-this.nodeSize)) {
+		this.drawingY = this.GUI.h - this.nodeSize;
+	}
+
+	with (this.context) {
+		globalAlpha=1;
+		beginPath();
+			fillStyle = this.colors.accent;
+			strokeStyle = this.colors.border;
+			lineWidth = this.lineWidth;
+			arc(this.drawingX, this.drawingY, this.nodeSize, 0, Math.PI*2, true);					
+			fill();
+		closePath();
+	}
+}
+
+joints.prototype.click = function() {
+	this.val = new Object();
+	this.val.x = this.clickPos.x/this.GUI.w;
+	this.val.y = this.clickPos.y/this.GUI.h;
+	this.draw();
+	this.transmit(this.val);
+	this.connections = new Array();
+    
+}
+
+joints.prototype.move = function() {
+	this.val = new Object();
+	if (this.clicked) {
+		this.val.x = this.clickPos.x/this.GUI.w;
+		this.val.y = this.clickPos.y/this.GUI.h;
+		this.draw();
+		this.transmit(this.val);
+		this.connections = new Array();
+	}
+}
+
+
+joints.prototype.release = function() {
+		this.anix = this.deltaMove.x/this.GUI.w;
+		this.aniy = (this.deltaMove.y)/this.GUI.h;
+	
+}
+
+/** @method animate
+	Add simple physics to the widget
+	@param {string} [type] Currently accepts "bounce" or "none".
+*/
+
+joints.prototype.animate = function(aniType) {
+	
+	switch (aniType) {
+		case "bounce":
+			nx.aniItems.push(this.aniBounce.bind(this));
+			break;
+		case "none":
+			nx.aniItems.splice(nx.aniItems.indexOf(this.aniBounce));
+			break;
+	}
+	
+}
+
+joints.prototype.anix = 0;
+joints.prototype.aniy = 0;
+
+joints.prototype.aniBounce = function() {
+	if (!this.clicked && this.val.x) {
+		this.val.x += (this.anix);
+		this.val.y += (this.aniy);
+		this.anix = math.bounce(this.val.x, 0.1, 0.9, this.anix);
+		this.aniy = math.bounce(this.val.y, 0.1, 0.9, this.aniy);
+		this.draw();
+		this.transmit(this.val);
+	}
+}
+
+},{"../core/widget":3,"../utils/math":6,"util":51}],20:[function(require,module,exports){
+var util = require('util');
+var widget = require('../core/widget');
+var drawing = require('../utils/drawing');
+var math = require('../utils/math');
+
+/** 
+	@class keyboard      
+	Piano keyboard which outputs MIDI
+	```html
+	<canvas nx="keyboard"></canvas>
+	```
+	<canvas nx="keyboard" style="margin-left:25px"></canvas>
+*/
+
+var keyboard = module.exports = function (target) {
+
+	this.defaultSize = { width: 300, height: 75 };
+	widget.call(this, target);
+
+	/** @property {integer} octaves  Number of octaves on the keyboard 
+		```js
+			//This key pattern would put a black key between every white key
+			keyboard1.octaves = 1
+			keyboard1.init()
+		```
+
+	*/
+	
+	this.octaves = 3;
+
+	this.white = {
+		width:0,
+		height:0
+	}
+	this.black = {
+		width:0,
+		height:0
+	}
+	this.wkeys = new Array();
+	this.bkeys = new Array();
+
+	/** @property {array} keypattern Array of 'w' and 'b' denoting the pattern of white and black keys. This can be customized! The pattern can be any number of keys, however each black key must be surrounded by two white keys.
+	```js
+		//This key pattern would put a black key between every white key
+		keyboard1.keypattern = ['w','b','w','b','w','b','w','b','w','b','w','b']
+		keyboard1.init()
+
+		//This key pattern uses only white keys
+		keyboard2.keypattern = ['w','w','w','w','w','w','w','w','w','w','w','w']
+		keyboard2.init()
+	```
+
+
+	 */
+	this.keypattern = ['w','b','w','b','w','w','b','w','b','w','b','w']
+	this.keys = new Array();
+	/** @property {integer} midibase The MIDI note value of the lowest note on the keyboard. Defaults to 48. */
+	this.midibase = 48;
+	this.lineWidth = 1;
+
+	//to enable multitouch
+	this.fingers = [
+		{ 
+			key: -1,
+			pkey: -1
+
+		}
+	]
+	this.multitouch = false; // will auto switch to true if experiences 2 simultaneous touches
+	this.oneleft = false;
+
+	/** @property {string} mode Play mode. Currently accepts "button" (default) or "sustain" in which each key acts as a toggle. */	
+	this.mode = "button" // modes: "button", "sustain" and, possibly in future, "aftertouch"
+
+	// for each key: x, y, w, h, color, on, note
+
+	/** @property {object}  val   Core interactive values and data output
+		| &nbsp; | data
+		| --- | ---
+		| *on* | 0 if noteon, 1 if noteoff
+		| *note* | MIDI value of key pressed
+		| *midi* | paired MIDI message as a string - example "20 0" - This is to allow for simultaneous arrival of the MIDI pair if sent as an OSC message. 
+	*/
+	this.val = {
+		on: 0,
+		note: 0,
+		midi: "0 0"
+	};
+
+	this.init();
+	
+}
+util.inherits(keyboard, widget);
+
+keyboard.prototype.init = function() {
+
+	//recap from header
+	this.white = {
+		width:0,
+		height:0
+	}
+	this.black = {
+		width:0,
+		height:0
+	}
+	this.wkeys = new Array();
+	this.bkeys = new Array();
+
+	/** @property {array} keys Array of key objects. This may be of use in combination with the keyboard.toggle method. */
+	this.keys = new Array();
+
+	//new stuff
+	this.white.num = 0;
+	for (var i=0;i<this.keypattern.length;i++) {
+		this.keypattern[i]=='w' ? this.white.num++ : null;
+	}
+	this.white.num *= this.octaves;
+
+	this.white.width = this.GUI.w/this.white.num
+	this.white.height = this.GUI.h
+
+	this.black.width = this.white.width*0.6
+	this.black.height = this.GUI.h*0.6
+
+	for (var i=0;i<this.keypattern.length*this.octaves;i++) {
+		this.keys[i] = {
+			note: i+this.midibase,
+			on: false
+		}
+		switch (this.keypattern[i%this.keypattern.length]) {
+			case 'w':
+				this.keys[i].x =  this.wkeys.length*this.white.width,
+				this.keys[i].y = 0,
+				this.keys[i].w = this.white.width,
+				this.keys[i].h = this.white.height,
+				this.keys[i].type = 'w';
+				this.keys[i].index = i;
+				this.wkeys.push(this.keys[i]);
+
+				break;
+			case 'b':
+				this.keys[i].x = this.wkeys.length*this.white.width - this.black.width/2,
+				this.keys[i].y = 0,
+				this.keys[i].w = this.black.width,
+				this.keys[i].h = this.black.height,
+				this.keys[i].type = 'b';
+				this.keys[i].index = i;
+				this.bkeys.push(this.keys[i]);
+				break;
+		}
+	}
+
+
+	this.draw();
+}
+
+keyboard.prototype.draw = function() {
+
+	with (this.context) {
+		strokeStyle = this.colors.borderhl;
+		lineWidth = 1;
+			
+		for (var i in this.wkeys) {
+			fillStyle = this.wkeys[i].on ? this.colors.borderhl : this.colors.fill
+			strokeRect(this.wkeys[i].x,0,this.white.width,this.white.height);
+			fillRect(this.wkeys[i].x,0,this.white.width,this.white.height);
+		}
+		for (var i in this.bkeys) {
+			fillStyle = this.bkeys[i].on ? this.colors.borderhl : this.colors.black
+			fillRect(this.bkeys[i].x,0,this.black.width,this.black.height);
+		}
+		//strokeRect(0,0,this.GUI.w,this.GUI.h);
+	}
+	this.drawLabel();
+}
+
+/** @method toggle
+	Manually toggle a key on or off, and transmit the new state.
+	@param {object} [key]  A key object (from the .keys array) to be turned on or off
+	@param {boolean} [on/off]  (Optional) Whether the key should be turned on (true) or off (false). If this parameter is left out, the key will switch to its opposite state.
+	```js
+	// Turns the first key on
+	keyboard1.toggle( keyboard1.keys[0], true );
+	```
+*/
+keyboard.prototype.toggle = function(key, data) {
+	if (this.mode=="button") {
+		if (key) {
+			if (data || data===false) {
+				key.on = data;
+			} else {
+				key.on = !key.on;
+			}
+
+			var on = key.on ? 1 : 0;
+			var amp = math.invert(this.clickPos.y/this.GUI.h) * 128;
+			amp = math.prune(math.clip(amp,5,128),0);
+
+			this.val = { 
+				on: on*amp,
+				note: key.note,
+				midi: key.note + " " + on
+			};
+			this.transmit(this.val);
+			this.draw();
+		}
+	} else if (this.mode=="sustain") {
+		if (key) {
+			if (data) {
+				key.on = data;
+			} else {
+				key.on = !key.on;
+			}
+
+			var on = key.on ? 1 : 0;
+			var amp = math.invert(this.clickPos.y/this.GUI.h) * 128;
+			amp = math.prune(math.clip(amp,5,128),0);
+
+			this.val = { 
+				on: on*amp,
+				note: key.note,
+				midi: key.note + " " + on
+			};
+			this.transmit(this.val);
+			this.draw();
+		}
+
+	}
+
+}
+
+keyboard.prototype.whichKey = function (x, y){
+
+	for (var i in this.bkeys) {
+		if (drawing.isInside({"x":x,"y":y}, this.bkeys[i])) {
+			return this.bkeys[i]
+		}
+	}
+
+	var keyx = ~~(x/this.white.width);
+	if (keyx>=this.wkeys.length) { keyx = this.wkeys.length-1 }
+	if (keyx<0) { keyx = 0 }
+	return this.wkeys[keyx];
+}
+
+keyboard.prototype.click = function(e) {
+
+	if (this.clickPos.touches.length>1 || this.multitouch) {
+		this.multitouch = true;
+		if (this.clickPos.touches.length>=2 && this.oneleft) {
+			this.oneleft = false;
+		}
+		this.keysinuse = new Array();
+		for (var j=0;j<this.clickPos.touches.length;j++) {
+			this.fingers[j] = {
+				key: this.whichKey(this.clickPos.touches[j].x, this.clickPos.touches[j].y)
+			}
+			if (!this.fingers[j].key.on) {
+				this.toggle(this.fingers[j].key, true)
+			}
+			this.keysinuse.push(this.fingers[j].key.index)
+		}
+		for (var j=0;j<this.keys.length;j++) {
+			if (this.keys[j].on  && this.keysinuse.indexOf(this.keys[j].index)<0) {
+				this.toggle(this.keys[j], false);
+			}
+		}
+	} else {
+		this.fingers[0].pkey = this.fingers[0].key;
+		this.fingers[0].key = this.whichKey(this.clickPos.x, this.clickPos.y);
+		this.toggle(this.fingers[0].key)
+	}
+
+}
+
+keyboard.prototype.move = function(e) {
+	if (this.clickPos.touches.length>1 || this.multitouch) {
+		this.keysinuse = new Array();
+		for (var j=0;j<this.clickPos.touches.length;j++) {
+			this.fingers[j] = {
+				key: this.whichKey(this.clickPos.touches[j].x, this.clickPos.touches[j].y)
+			}
+			if (!this.fingers[j].key.on) {
+				this.toggle(this.fingers[j].key, true)
+			}
+			this.keysinuse.push(this.fingers[j].key.index)
+		}
+		for (var j=0;j<this.keys.length;j++) {
+			if (this.keys[j].on  && this.keysinuse.indexOf(this.keys[j].index)<0) {
+				this.toggle(this.keys[j], false);
+			}
+		}
+	} else {
+		this.fingers[0].pkey = this.fingers[0].key;
+		this.fingers[0].key = this.whichKey(this.clickPos.x, this.clickPos.y);
+		if (this.fingers[0].key && this.fingers[0].key.index != this.fingers[0].pkey.index) {
+			this.toggle(this.fingers[0].pkey, false);
+			this.toggle(this.fingers[0].key, true);
+		}
+	}
+}
+
+keyboard.prototype.release = function(e) {
+	if (this.clickPos.touches.length>1 || this.multitouch) {
+		this.keysinuse = new Array();
+		for (var j=0;j<this.clickPos.touches.length;j++) { 
+			if (this.oneleft && this.clickPos.touches.length==1) {
+				break;
+			}
+			this.fingers[j] = {
+				key: this.whichKey(this.clickPos.touches[j].x, this.clickPos.touches[j].y)
+			}
+			this.keysinuse.push(this.fingers[j].key.index)
+		}
+		for (var j=0;j<this.keys.length;j++) {
+			if (this.keys[j].on  && this.keysinuse.indexOf(this.keys[j].index)<0) {
+				this.toggle(this.keys[j], false);
+			}
+		}
+		if (this.clickPos.touches.length==1) { this.oneleft = true }
+	} else {
+		if (this.mode=="button") {
+			this.toggle(this.fingers[0].key, false);
+		}
+	}
+}
+
+
+
+
+
+
+
+
+},{"../core/widget":3,"../utils/drawing":5,"../utils/math":6,"util":51}],21:[function(require,module,exports){
+var math = require('../utils/math');
+var drawing = require('../utils/drawing');
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class matrix      
+	Matrix of toggles, with sequencer functionality.
+	```html
+	<canvas nx="matrix"></canvas>
+	```
+	<canvas nx="matrix" style="margin-left:25px"></canvas>
+*/
+
+
+var matrix = module.exports = function (target) {
+	this.defaultSize = { width: 100, height: 100 };
+	widget.call(this, target);
+	
+
+	/** @property {integer}  row   Number of rows in the matrix
+	```js
+		matrix1.row = 2;
+		matrix1.init()
+	```
+	*/
+	this.row = 4;
+
+	/** @property {integer}  col   Number of columns in the matrix
+	```js
+		matrix1.col = 10;
+		matrix1.init()
+	```
+	*/
+	this.col = 4;
+	
+	this.cellHgt;
+	this.cellWid;
+
+	/** @property {array}  matrix   Nested array of matrix values. Cells can be manually altered using .matrix (see code), however this will *not* cause the new value to be transmit. See .setCell() to set/transmit cell values.
+	```js
+		//Turn on the cell at row 1 column 2
+		matrix1.matrix[1][2] = 1
+		matrix1.draw()
+
+
+		//Turn off the cell at row 3 column 0
+		matrix1.matrix[3][0] = 0
+		matrix1.draw()
+	```
+	*/
+	this.matrix;
+
+	/** @property {object}  val   Core values and data output
+		| &nbsp; | data
+		| --- | ---
+		| *row* | Current row being changed
+		| *col* | Current column being changed
+		| *level* | Whether cell is on or off (0 or 1)
+		| *list * | Array of values in highlighted column (if sequencing)
+	*/
+	this.val = {
+		row: 0,
+		col: 0,
+		level: 0,
+		list: new Array()
+	}
+
+	//for mouse logic
+	this.cur;
+	this.prev;
+
+	/** @property {boolean}  erasing   Whether or not mouse clicks will erase cells. Set to true automatically if you click on an "on" cell. */
+	this.erasing = false;
+
+	/** @property {integer}  place   When sequencing, the current column. */
+	this.place = null;
+
+	this.starttime;
+	this.lastbeat;
+	this.thisframe = 0;
+	this.lastframe = 0;
+	this.context.lineWidth = 1;
+
+	this.sequencing = false;
+
+	/** @property {integer}  cellBuffer  How much padding between matrix cells, in pixels */
+	this.cellBuffer = 4;
+	
+	/** @property {string}  sequenceMode  Sequence pattern (currently accepts "linear" which is default, or "random") */
+	this.sequenceMode = "linear"; // "linear" or "random". future options would be "wander" (drunk) or "markov"
+
+	/** @property {integer}  bpm   Beats per minute (if sequencing)
+	```js
+		matrix1.bpm = 120;
+	```
+	*/
+	this.bpm = 120;
+	this.pbpm = this.bpm
+
+	this.starttime = nx.starttime;
+
+	this.init();
+	
+}
+util.inherits(matrix, widget);
+
+
+
+matrix.prototype.init = function() {
+
+
+	this.pmatrix = this.matrix ? this.matrix : false;
+
+	this.matrix = null;
+	// generate 2D matrix array
+	this.matrix = new Array(this.col)
+	for (var i=0;i<this.col;i++) {
+		this.matrix[i] = new Array(this.row)
+		for (var j=0;j<this.row;j++) {
+			this.matrix[i][j] = this.pmatrix ? this.pmatrix[i] ? this.pmatrix[i][j] : 0 : 0; // set value of each matrix cell
+		}
+	}
+
+	this.draw();
+
+  	this.life = this.unboundlife.bind(this)
+	
+}
+
+matrix.prototype.draw = function() {
+
+	this.erase();
+
+	this.cellWid = this.GUI.w/this.col;
+	this.cellHgt = this.GUI.h/this.row;
+
+	with (this.context) {
+		strokeStyle = this.colors.fill
+		//lineWidth = 0
+		//strokeRect(0,0,this.GUI.w,this.GUI.h)
+	}
+
+	for (var i=0;i<this.row;i++){
+		for (var j=0;j<this.col;j++) {
+			var st_x = j*this.cellWid // starting point(left)
+			j==0 ? st_x += 0 : null;
+			var st_y = i*this.cellHgt; // starting point(top)
+			i==0 ? st_y += 0 : null;
+			var boxwid = this.cellWid;
+			var boxhgt = this.cellHgt;
+
+			
+			with (this.context) {
+				strokeStyle = this.colors.border;
+				lineWidth = this.cellBuffer;
+				if (this.matrix[j][i] > 0) {
+					fillStyle = this.colors.accent;
+				} else {
+					fillStyle = this.colors.fill;
+				}
+				fillRect(st_x+this.cellBuffer/2, st_y+this.cellBuffer/2, boxwid-this.cellBuffer, boxhgt-this.cellBuffer);
+			
+				// sequencer highlight
+				if (this.place == j) {
+					globalAlpha = 0.4;
+					fillStyle = this.colors.border;
+					fillRect(st_x, st_y, boxwid, boxhgt);
+					globalAlpha = 1;
+				}
+
+			}
+		} 
+	}
+
+	this.drawLabel();
+}
+
+
+
+matrix.prototype.click = function(e) {
+
+	this.cur = {
+		col: ~~(this.clickPos.x/this.cellWid),
+		row: ~~(this.clickPos.y/this.cellHgt)
+	}
+
+	if (this.matrix[this.cur.col][this.cur.row]) {
+		this.matrix[this.cur.col][this.cur.row] = 0;
+		this.erasing = true;
+	} else {
+		this.matrix[this.cur.col][this.cur.row] = 1;
+		this.erasing = false;
+	}
+
+	this.cur.value = this.matrix[this.cur.col][this.cur.row]
+	this.prev = this.cur;
+
+//	var data = this.matrix[this.cur.col];
+//	data = data.join();
+//	data = data.replace(/\,/g," ");
+
+	this.val = {
+		row: this.cur.row,
+		col: this.cur.col,
+		level: this.cur.value
+	}
+
+	this.transmit(this.val);
+	this.draw();
+}
+
+matrix.prototype.move = function(e) {
+	if (this.clicked) {
+		
+		this.cur = {
+			col: ~~(this.clickPos.x/this.cellWid),
+			row: ~~(this.clickPos.y/this.cellHgt)
+		}
+
+		if (this.cur.row < this.row && this.cur.col < this.col && this.cur.row >= 0 && this.cur.col >=0) {
+			if (this.cur.col!=this.prev.col || this.cur.row != this.prev.row) {
+				if (this.erasing) {
+					this.matrix[this.cur.col][this.cur.row] = 0;
+				} else {
+					this.matrix[this.cur.col][this.cur.row] = 1;
+				}
+
+				this.cur.value = this.matrix[this.cur.col][this.cur.row]
+				this.prev = this.cur;
+
+				this.val = {
+					row: this.cur.row,
+					col: this.cur.col,
+					level: this.cur.value
+				}
+
+				this.transmit(this.val);
+				this.draw();
+			}
+		}
+
+	}
+}
+
+
+/** @method setCell
+Manually set an individual cell on/off and transmit the new value.
+@param {integer} [col] The column of the cell to be turned on/off
+@param {integer} [row] The row of the cell to be turned on/off
+@param {boolean} [on/off] Whether the cell should be turned on/off
+
+```js
+	// Turns cell on at column 1 row 3
+	matrix1.setCell(1,3,true);
+```
+*/
+matrix.prototype.setCell = function(col,row,on) {
+
+	var value = on ? 1 : 0;
+	this.matrix[col][row] = value
+
+	this.val = {
+		row: row,
+		col: col,
+		level: value
+	}
+
+	this.transmit(this.val);
+	this.draw();
+
+}
+
+/** @method sequence
+@param {float} [bpm] Beats per minute of the pulse
+Turns the matrix into a sequencer.
+
+```js
+	matrix1.sequence(240);
+```
+*/
+matrix.prototype.sequence = function(bpm) {
+
+	if (bpm) {
+		this.bpm = bpm;
+	}	
+	this.sequencing = true;
+	requestAnimationFrame(this.seqStep.bind(this));
+
+}
+
+matrix.prototype.setBPM = function(bpm) {
+	this.bpm = bpm
+	//console.log(bpm)
+	//nx.interval.bpm(this.pulse,bpm)
+}
+
+/** @method stop
+Stops the matrix sequencer.
+
+```js
+	matrix1.stop();
+```
+*/
+matrix.prototype.stop = function() {
+	this.sequencing = false;
+}
+
+matrix.prototype.seqStep = function() {
+
+	if (this.bpm == 0) { this.bpm = 1 }
+
+	//current time
+	var now = new Date().getTime();
+
+	//delta time since start
+	var dt = now - this.starttime;
+
+	if (this.bpm != this.pbpm) {
+
+		//frame + decimal since last beat, in old bpm
+		var timeP = (dt/(60000/this.pbpm))
+
+		// scale to new bpm
+		dt = timeP * (60000/this.bpm)
+
+		//adjust the starttime reference point
+		this.starttime = now - dt
+
+		//calculate new frame #
+		this.thisframe = ~~(dt/(60000/this.bpm));
+
+	} else {
+
+	    //this.thisframe is a constantly ascending integer counter
+	    //to compare with this.lastframe to determine when to increment this.place
+	    //this.thisframe IS NOT the current column.
+	    //the current column is this.place, which is set conditionally below.
+		this.thisframe = ~~(dt/(60000/this.bpm));
+
+	}
+
+	this.pbpm = this.bpm;
+
+    if (this.thisframe != this.lastframe) {
+
+		this.lastbeat = now;
+
+		if (this.sequenceMode=="linear") {
+			this.place++;
+		} else if (this.sequenceMode=="random") {
+			this.place = math.random(this.col);
+		}
+		if (this.place>=this.col) {
+			this.place = 0;
+		}
+
+		if (this.place==null) {
+			this.place = 0;
+		}
+
+		this.jumpToCol(this.place);
+
+    }
+
+	this.lastframe = this.thisframe;
+    if (this.sequencing) {
+		requestAnimationFrame(this.seqStep.bind(this));
+	}  
+}
+
+/** @method jumpToCol
+Jump to a certain column of the matrix, highlight it, and output its values as an array. Column numbers start at 0.
+
+```js
+	matrix1.jumpToCol(1);
+```
+*/
+
+matrix.prototype.jumpToCol = function(place) {
+		this.place = place
+		this.val = {
+			list: this.matrix[this.place]
+		}
+		this.transmit(this.val);
+		this.draw();
+}
+
+
+matrix.prototype.customDestroy = function() {
+	this.stop();
+}
+
+matrix.prototype.unboundlife = function() {
+  if (!this.clicked) {
+  this.newmatrix = []
+  for (var i=0;i<this.col;i++) {
+    this.newmatrix[i] = []
+    for (var j=0;j<this.row;j++) {
+      var total = 0
+      if (i-1 >= 0) {
+        total += this.matrix[i-1][j-1] ? this.matrix[i-1][j-1] : 0
+        total += this.matrix[i-1][j] ? this.matrix[i-1][j] : 0
+        total += this.matrix[i-1][j+1] ? this.matrix[i-1][j+1] : 0
+      }
+      total += this.matrix[i][j-1] ? this.matrix[i][j-1] : 0
+      total += this.matrix[i][j+1] ? this.matrix[i][j+1] : 0
+      if (i+1 < this.col) {
+        total += this.matrix[i+1][j-1] ? this.matrix[i+1][j-1] : 0
+        total += this.matrix[i+1][j] ? this.matrix[i+1][j] : 0
+        total += this.matrix[i+1][j+1] ? this.matrix[i+1][j+1] : 0
+      }
+
+      if (this.matrix[i][j]) {
+        if (total < 2) {
+          this.newmatrix[i][j] = 0
+        } else if (total ==2 || total == 3) {
+          this.newmatrix[i][j] = 1
+        } else if (total > 3) {
+          this.newmatrix[i][j] = 0
+        }
+      } else if (!this.matrix[i][j] && total == 3) {
+        this.newmatrix[i][j] = 1
+      } else {
+        this.newmatrix[i][j] = this.matrix[i][j]
+      }
+    }
+  }
+  this.matrix = this.newmatrix
+  }
+  this.transmit({ grid: this.matrix})
+  this.draw()
+}
+
+/** @method life
+Alters the matrix according to Conway's Game of Life. Matrix.life() constitutes one tick through the game. To simulate the game, you might use setInterval.
+
+```js
+  //one tick
+  matrix1.life();
+
+  //repeated ticks at 80ms
+  setInterval(matrix1.life,80)
+```
+*/
+matrix.prototype.life = function() { 
+  return false;
+}
+
+},{"../core/widget":3,"../utils/drawing":5,"../utils/math":6,"util":51}],22:[function(require,module,exports){
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class message      
+	Send a string of text.
+	```html
+	<canvas nx="message"></canvas>
+	```
+	<canvas nx="message" style="margin-left:25px"></canvas>
+*/
+
+var message = module.exports = function (target) {
+	
+	this.defaultSize = { width: 100, height: 30 };
+	widget.call(this, target);
+	
+
+	/** @property {object}  val   
+		| &nbsp; | data
+		| --- | ---
+		| *value* | Text of message, as string
+	*/
+
+	this.val = {
+		value: "send a message"
+	}
+
+	/** @property {integer} size Text size in px */
+	this.size = 14;
+	
+}
+util.inherits(message, widget);
+
+message.prototype.init = function() {
+	if (this.canvas.getAttribute("label")) {
+		this.val.value = this.canvas.getAttribute("label");
+	}
+	//this.size = Math.sqrt((this.GUI.w * this.GUI.h) / (this.val.message.length));
+	this.draw();
+}
+
+message.prototype.draw = function() {
+	this.erase();
+	with (this.context) {
+		if (this.clicked) {
+			fillStyle = this.colors.border;
+		} else {
+			fillStyle = this.colors.fill;
+		}
+		fillRect(0,0,this.GUI.w,this.GUI.h)
+		
+		if (this.clicked) {
+			fillStyle = this.colors.black;
+		} else {
+			fillStyle = this.colors.black;
+		}
+		textAlign = "left";
+		font = this.size+"px "+nx.font;
+	}
+	this.wrapText(this.val.value, 5, 1+this.size, this.GUI.w-6, this.size);
+}
+
+message.prototype.click = function(e) {
+	this.draw();
+	this.transmit(this.val);
+}
+
+message.prototype.release = function(e) {
+	this.draw();
+}
+},{"../core/widget":3,"util":51}],23:[function(require,module,exports){
+var util = require('util');
+var drawing = require('../utils/drawing');
+var widget = require('../core/widget');
+
+/** 
+    
+    @public
+    @class meter 
+
+    Decibel level meter.
+
+    ```html
+    <canvas nx="meter"></canvas>
+    ```
+    <canvas nx="meter" style="margin-left:25px"></canvas>
+*/
+
+var meter = module.exports = function(target) {
+
+    // to update, eventually (note to self)
+    // possibly a less-frequent animation request, to lighten the graphics load
+    // option for stereo meter? i.e. optional third .setup(ctx,s1,s2) argument
+
+    this.defaultSize = { width: 20, height: 50 };
+    widget.call(this, target);
+
+    this.val = {
+        level: 0
+    }
+    this.dataArray;
+    this.bars = 8;
+
+    this.init();
+
+}
+util.inherits(meter, widget);
+
+
+meter.prototype.init = function(){
+   this.bar = {
+        x: 0,
+        y: 0,
+        w: this.GUI.w,
+        h: this.GUI.h/this.bars
+    }
+    with (this.context) {
+        fillStyle = this.colors.fill;
+        fillRect(0,0,this.GUI.w, this.GUI.h);
+    }
+}
+
+
+
+/** @method setup  
+    Connect the meter to an audio source and start the meter's graphics.
+    @param {audio context} [context] The audio context hosting the source node
+    @param {audio node} [source] The audio source node to analyze
+    */
+meter.prototype.setup = function(actx,source){
+    this.actx = actx;   
+    this.source = source;
+
+    this.analyser = this.actx.createAnalyser();
+    this.analyser.smoothingTimeConstant = 0.85;
+    this.analyser.fftsize = 1024;
+    this.bufferLength = this.analyser.frequencyBinCount;
+    this.dataArray = new Uint8Array(this.bufferLength);
+    this.source.connect(this.analyser);
+    
+    this.draw();
+}
+
+meter.prototype.draw = function(){
+    
+    if(this.dataArray) {
+        this.analyser.getByteTimeDomainData(this.dataArray);
+
+        var max = Math.max.apply(null, this.dataArray);
+        var min = Math.min.apply(null, this.dataArray);
+        var amp = max - min;
+        amp /= 240
+
+        //converts amps to db
+        var db = 20 * (Math.log(amp) / Math.log(10))
+
+        with (this.context){
+            fillStyle = this.colors.fill;
+            fillRect(0,0,this.GUI.w, this.GUI.h);
+
+            //scales: -40 to +10 db range => a number of bars
+            var dboffset = Math.floor((db + 40) / (50/this.bars) );
+           
+            for (var i = 0; i<this.bars; i++) {
+
+                // 0+ db is red
+                if(i >= this.bars*.8) {
+                    fillStyle = 'rgb(255,0,0)';
+
+                // -5 to 0 db is yellow
+                } else if (i < this.bars*.8 && i >= this.bars*.69) {
+                    fillStyle = 'rgb(255,255,0)';
+
+                // -40 to -5 db is green
+                } else if (i < this.bars*.69) {
+                    fillStyle = 'rgb(0,255,0)';
+                }
+
+                // draw bar
+                if (i<dboffset)
+                    fillRect(1,this.GUI.h-this.bar.h*i,this.GUI.w-2,this.bar.h-2);
+
+            }
+        }
+    }
+
+    setTimeout(function() {
+        window.requestAnimationFrame(this.draw.bind(this));
+    }.bind(this), 80)
+    
+}
+    
+    
+},{"../core/widget":3,"../utils/drawing":5,"util":51}],24:[function(require,module,exports){
+var math = require('../utils/math')
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class metro      
+	Bouncing ball metronome
+	```html
+	<canvas nx="metro"></canvas>
+	```
+	<canvas nx="metro" style="margin-left:25px"></canvas>
+*/
+
+var metro = module.exports = function (target) {
+	this.defaultSize = { width: 100, height: 20 };
+	widget.call(this, target);
+
+	//define unique attributes
+	
+	/** @property {object}  val   
+		| &nbsp; | data
+		| --- | ---
+		| *beat* | Which side the ball is bouncing on (0 if left, 1 if right)
+	*/
+	this.val = {
+		beat: 0
+	}
+
+	this.x = 10;
+	this.y = 10;
+	this.loc = 10;
+	this.nodeSize = 10;
+	/** @property {float} speed Speed of the ball (default 1) */
+	this.speed = 1;
+	this.direction = 1;
+	/** @property {string} orientation Orientation of metro. Default is "horizontal". */
+	this.orientation = "horizontal"
+	this.boundary = this.GUI.w
+
+	nx.aniItems.push(this.advance.bind(this));
+	this.active = true;
+	
+	this.init();
+}
+util.inherits(metro, widget);
+
+metro.prototype.init = function() {
+	this.nodeSize = Math.min(this.GUI.w,this.GUI.h)/2;
+	if (this.GUI.w<this.GUI.h) {
+		this.orientation = "vertical"
+		this.boundary = this.GUI.h
+	} else {
+		this.orientation = "horizontal"
+		this.boundary = this.GUI.w
+	}
+	this.x = this.nodeSize;
+	this.y = this.nodeSize;
+	this.loc = this.nodeSize;
+
+	this.draw();
+
+}
+
+metro.prototype.draw = function() {
+	this.erase()
+	with (this.context) {
+		fillStyle = this.colors.fill;
+		fillRect(0,0,this.GUI.w,this.GUI.h); 
+
+		beginPath();
+		fillStyle = this.colors.accent;
+		arc(this.x, this.y, this.nodeSize, 0, Math.PI*2, true);					
+		fill();
+		closePath();
+	}
+	
+	this.drawLabel();
+}
+
+metro.prototype.click = function() {
+}
+
+metro.prototype.move = function() {
+	if (this.clicked) {
+		this.speed -= (this.deltaMove.y / 50);
+	}
+}
+
+metro.prototype.release = function() {
+}
+
+metro.prototype.advance = function() {
+	if (this.speed>=0) {
+		this.loc += this.speed * this.direction;
+	} else {
+		this.loc += this.speed * this.direction;
+	}
+	if (this.loc-this.nodeSize<0 || this.loc+this.nodeSize>this.boundary) {
+		this.val.beat = math.scale(this.direction,-1,1,0,1)
+		this.transmit(this.val);
+		this.direction *= -1
+	}
+	if (this.orientation == "vertical") {
+		this.y = this.loc
+	} else {
+		this.x = this.loc
+	}
+	this.draw();
+}
+
+metro.prototype.customDestroy = function() {
+	nx.removeAni(this.advance.bind(this))
+}
+},{"../core/widget":3,"../utils/math":6,"util":51}],25:[function(require,module,exports){
+var math = require('../utils/math');
+var drawing = require('../utils/drawing');
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class metroball
+	Bouncy-balls for rhythms
+	```html
+	<canvas nx="metroball"></canvas>
+	```
+	<!-- <canvas nx="metroball" style="margin-left:25px"></canvas> -->
+*/
+
+
+var metroball = module.exports = function (target) {
+	this.defaultSize = { width: 300, height: 200 };
+	widget.call(this, target);
+	
+	
+	//define unique attributes
+	this.CurrentBalls = new Array();
+	this.ballpos = new Object();
+	this.clickField = null;
+	this.globalMetro;
+	this.tempo = 1;
+	this.tempoMarker = 150;
+	this.quantize = false;
+	this.tiltLR;
+	this.tiltFB;
+	this.z;
+
+	/** @property {object}  val   
+		| &nbsp; | data
+		| --- | ---
+		| *x* | x position of the bouncing ball
+		| *side* | 0 or 1 int (which side is hit)
+		| *ball* | Which ball is doing the bouncing
+		| *all* | All three values together in a string
+	*/
+	this.val = {
+		x: false,
+		side: false,
+		ball: false,
+		all: false
+	}
+
+	nx.aniItems.push(this.metro.bind(this));
+
+	this.init();
+}
+util.inherits(metroball, widget);
+
+metroball.prototype.init = function() {
+	//this.metro();
+	this.draw()
+}
+
+metroball.prototype.metro = function() {
+	with (this.context) {
+		clearRect(0,0, this.GUI.w, this.GUI.h);
+	}
+	this.drawSpaces();
+	this.drawBalls();
+	this.drawLabel();
+}
+
+metroball.prototype.drawSpaces = function() {
+	
+	with (this.context) {
+
+		fillStyle = this.colors.fill;
+		fillRect(0,0,this.GUI.w,this.GUI.h)
+		
+		fillStyle=this.colors.border;
+		fillRect(0,0,this.GUI.w,this.GUI.h/4)
+
+		font="normal "+this.GUI.h/8+"px "+nx.font;
+		textAlign = "center";
+		textBaseline = "middle"
+		fillText("add",this.GUI.w/2,this.GUI.h/1.66)
+
+
+		fillStyle = this.colors.fill;
+		fillText("delete",this.GUI.w/2,this.GUI.h/8)
+		
+	}
+}
+
+metroball.prototype.drawBalls = function() {
+	with (this.context) {
+		for (var i=0;i<this.CurrentBalls.length;i++) {
+			this.CurrentBalls[i].move();
+			this.CurrentBalls[i].draw();
+		}
+	}
+}
+
+metroball.prototype.click = function(e) {
+	
+	this.ballpos = this.clickPos;
+
+	if (this.clickPos.y < this.GUI.h/4) {
+		this.deleteMB(this.ballpos);
+	} else {
+		this.addNewMB(this.ballpos);
+	}
+	
+
+}
+
+metroball.prototype.move = function(e) {
+	this.ballpos = this.clickPos;
+	
+	if (this.clickPos.y < this.GUI.h/4) {
+		this.deleteMB(this.ballpos);
+	} else {
+		this.addNewMB(this.ballpos);
+	}
+}
+
+metroball.prototype.release = function(e) {
+	this.clickField = null;
+}
+
+
+metroball.prototype.deleteMB = function(ballpos) {
+	//delete in reverse order
+	for (var i=this.CurrentBalls.length-1;i>=0;i--) {
+		if (Math.abs(this.CurrentBalls[i].xpos-ballpos.x)<10) {
+			this.CurrentBalls[i].kill();
+		}
+	}
+	
+	//reset CurrentBalls
+	for (var i=0;i<this.CurrentBalls.length;i++) {
+		this.CurrentBalls[i].thisIndex=i;
+	}
+}
+
+	
+metroball.prototype.addNewMB = function(ballpos) {
+	var nextIndex = this.CurrentBalls.length;
+	this.CurrentBalls[nextIndex] = new this.Ball(nextIndex, ballpos.x, ballpos.y, this);
+}
+
+
+metroball.prototype.toggleQuantization = function() {
+	if (!this.quantize) {
+		this.quantize = true;
+	} else {
+		this.quantize = false;
+	}
+}
+
+/* Tilt */
+
+metroball.prototype.tilt = function(direction) {
+	
+	var scaledX = math.prune(this.tiltLR/90,3);
+	var scaledY = math.prune(this.tiltFB/90,3);
+	var scaledZ = math.prune(this.z,3);
+	tilt = scaledX * 10;
+	this.tempo = Math.pow(scaledY+1,3);
+}
+
+
+metroball.prototype.Ball = function(thisIndex, thisX, thisY, parent) {
+
+	
+	this.thisIndex = thisIndex;
+	this.color = parent.colors.accent;
+	this.space = {
+		ypos1: 0,
+		ypos2: parent.height,
+		xpos1: 0,
+		xpos2: parent.width,
+		hgt: parent.height,
+		wid: parent.width
+	}
+	this.xpos = thisX;
+	this.ypos = thisY;
+	this.size = 10;
+	this.direction = 1;
+	this.speed = (parent.height-this.ypos)/20;
+	this.speedQ = 5;
+	
+	if (this.quantize) {
+		this.ypos = parent.height-13;
+	}
+	
+	this.move = function() {
+		if (!this.quantize) {
+			this.ypos = this.ypos + (this.speed * this.direction * parent.tempo);
+		} else {
+			this.ypos = this.ypos + (this.speedQ * this.direction * parent.tempo);	
+		}
+		
+		if (this.ypos>(parent.height-this.size-2) || this.ypos<(this.size+2) ) {
+			this.bounce();
+		}
+		
+		if (this.ypos<this.space.ypos+this.size) {
+			this.ypos=this.space.ypos+this.size+5;
+		} else if (this.ypos>this.space.ypos+this.space.hgt-this.size) {
+			this.ypos=this.space.ypos+this.space.hgt-this.size-5;
+		}
+		
+		
+		if (this.xpos<this.space.xpos) {
+			this.xpos = this.space.xpos2;	
+		} else if (this.xpos>this.space.xpos2) {
+			this.xpos = this.space.xpos;	
+		}
+		
+	}
+	
+	this.bounce = function() {
+		var dirMsg = this.direction/2+1;
+		this.bounceside = (this.direction+1)/2;
+		this.direction = this.direction * (-1);
+		var xMsg = math.prune(this.xpos/this.space.wid, 3);
+		this.val = {
+			x: xMsg,
+			side: this.bounceside,
+			ball: this.thisIndex,
+			all: xMsg + " " + this.bounceside + " " + this.thisIndex
+		}
+		parent.transmit(this.val);
+	}
+	
+	this.kill = function() {
+		parent.CurrentBalls.splice(this.thisIndex,1);
+	}
+	
+	this.draw = function() {
+		
+		with (parent.context) {
+			beginPath();
+			fillStyle = this.color;
+			if (this.direction==1) {
+				this.radius = this.size * (Math.abs((this.ypos-this.space.ypos-this.space.hgt/2)/(this.space.hgt-this.space.ypos)*2));
+				this.radius = this.radius/2 + this.size/2;
+				
+				this.radius = this.size;
+				
+				this.radius = this.speed;
+				
+				this.radius = Math.abs(15-this.speed);
+				
+			} else {
+				this.radius = this.size * Math.abs(2-(Math.abs((this.ypos-this.space.ypos-this.space.hgt/2)/(this.space.hgt-this.space.ypos)*2)));
+				this.radius = this.radius/2 + this.size/2;
+				
+				this.radius = this.size;
+				
+				this.radius = Math.abs(15-this.speed);
+			}
+			arc(this.xpos, this.ypos, this.radius, 0, Math.PI*2, true);
+			fill();
+		}	
+	}	
+}
+},{"../core/widget":3,"../utils/drawing":5,"../utils/math":6,"util":51}],26:[function(require,module,exports){
+var math = require('../utils/math')
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class motion      
+	Mobile motion sensor. Does not work on all devices! <br> **Notes:** Clicking on this widget toggles it inactive or active. <br>
+	We recommend not calling .init() on this object after the original initialization, because it will add additional redundant motion listeners to your document.
+	```html
+	<canvas nx="motion"></canvas>
+	```
+	<canvas nx="motion" style="margin-left:25px"></canvas>
+*/
+
+var motion = module.exports = function (target) {
+	this.defaultSize = { width: 75, height: 75 };
+	widget.call(this, target);
+	
+	this.motionLR;
+	this.motionFB;
+	this.z;
+	/** @property {boolean} active Whether or not the motion widget is on (animating and transmitting data). */
+	this.active = true;
+
+	this.px = 0;
+	this.py = 0;
+	this.pz = 0;
+
+	/** @property {object}  val  Object containing the core interactive aspects of the widget, which are also its data output. Has the following properties: 
+		| &nbsp; | data
+		| --- | ---
+		| *x* | X-axis motion if supported (-1 to 1)
+		| *y* | Y-axis motion if supported (-1 to 1)
+		| *z* | Z-axis motion if supported (-1 to 1 or 0 to 360 depending on device)
+	*/
+	this.val = {
+		x: 0,
+		y: 0,
+		z: 0
+	}
+
+	/** @property {string}  text   Text shown on motion object
+	*/
+	
+	this.text = "Motion";
+	this.init();
+
+	this.boundMotion = this.motionlistener.bind(this)
+
+	if (window.DeviceMotionEvent) {
+		window.addEventListener('devicemotion', this.boundMotion, false);
+	} else {
+		with (this.context) {
+			fillText("incompatible",0,0)
+			this.active = false;
+		}
+	}
+	
+}
+util.inherits(motion, widget);
+
+motion.prototype.deviceMotionHandler = function() {
+	
+	this.val = {
+		x: math.prune(this.motionLR/10,4),
+		y: math.prune(this.motionFB/10,4),
+		z: math.prune(this.z/10,4)
+	}
+
+	this.transmit(this.val);
+	
+}
+
+motion.prototype.motionlistener = function(e) {
+	var data = e.acceleration
+	
+	if (this.active) {
+
+
+		this.motionLR = nx.lp(this.canvasID+"motionx",data.x,20)
+		this.motionFB = nx.lp(this.canvasID+"motiony",data.y,20)
+		this.z = nx.lp(this.canvasID+"motionz",data.z,20)
+    	this.deviceMotionHandler()
+
+   		this.draw();
+
+		if (data.x===null || data.x===undefined) {
+			this.erase()
+			with (this.context) {
+				fillStyle = this.colors.fill
+				fillRect(0,0,this.GUI.w,this.GUI.h)
+				fillStyle = this.colors.black
+				font="12px courier";
+				textAlign = "center"
+				fillText("no data",this.GUI.w/2,this.GUI.h/2)	
+			}
+			this.active = false;
+		}
+ 	}
+}
+
+motion.prototype.init = function() {
+	this.draw()
+}
+
+motion.prototype.draw = function() {
+	
+	this.erase()
+
+	with (this.context) {
+	    fillStyle = this.colors.fill;
+	    fillRect(0,0,this.GUI.w,this.GUI.h);
+	    fillStyle = this.colors.accent;
+	    var eighth = Math.PI/4
+	    if (this.motionFB<0) {
+			beginPath()
+				moveTo(this.GUI.w/2,this.GUI.h/2)
+				arc(this.GUI.w/2,this.GUI.h/2,this.GUI.w/2,eighth*5,eighth*7,false)
+				globalAlpha = Math.pow(this.motionFB, 2)
+				fill()
+			closePath()
 	    } else {
-	      document.write("<style>" + defaultSizeDeclaration + "</style>");
+			beginPath()
+				moveTo(this.GUI.w/2,this.GUI.h/2)
+				arc(this.GUI.w/2,this.GUI.h/2,this.GUI.w/2,eighth*1,eighth*3,false)
+				globalAlpha = Math.pow(this.motionFB, 2)
+				fill()
+			closePath()
 	    }
-	    /* jshint ignore:end */
-	  }
-	
-	  _createClass(NexusUI, {
-	    context: {
-	      get: function () {
-	        return this._context;
-	      },
-	      set: function (ctx) {
-	        this.clock.stop();
-	        this._context = ctx;
-	        this.clock = new WAAClock(this.context);
-	        this.clock.start();
-	      }
-	    }
-	  });
-	
-	  return NexusUI;
-	})();
-	
-	var Nexus = new NexusUI();
-	
-	function colors() {
-	  return Nexus.colors;
-	}
-	
-	function context() {
-	  return Nexus.context;
-	}
-	
-	function clock() {
-	  return Nexus.clock;
-	}
-	
-	exports["default"] = Nexus;
-
-/***/ }),
-/* 2 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	"use strict";
-	
-	module.exports = {
-	  Position: __webpack_require__(3),
-	  Slider: __webpack_require__(14),
-	  Toggle: __webpack_require__(15),
-	  /*  Range: require('./rangeslider'),
-	    Waveform: require('./waveform'), */
-	  Button: __webpack_require__(16),
-	  TextButton: __webpack_require__(18),
-	  RadioButton: __webpack_require__(19),
-	  Number: __webpack_require__(20),
-	  Select: __webpack_require__(21),
-	  Dial: __webpack_require__(22),
-	  Piano: __webpack_require__(23),
-	  Sequencer: __webpack_require__(24),
-	  Pan2D: __webpack_require__(29),
-	  Tilt: __webpack_require__(30),
-	  Multislider: __webpack_require__(31),
-	  Pan: __webpack_require__(32),
-	  Envelope: __webpack_require__(33),
-	  Spectrogram: __webpack_require__(34),
-	  Meter: __webpack_require__(35),
-	  Oscilloscope: __webpack_require__(36)
-	};
-
-/***/ }),
-/* 3 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	
-	"use strict";
-	
-	var _interopRequireWildcard = function (obj) { return obj && obj.__esModule ? obj : { "default": obj }; };
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _get = function get(object, property, receiver) { var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { return get(parent, property, receiver); } } else if ("value" in desc && desc.writable) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } };
-	
-	var _inherits = function (subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) subClass.__proto__ = superClass; };
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var svg = __webpack_require__(4);
-	var Interface = __webpack_require__(6);
-	var Step = __webpack_require__(11);
-	
-	var Interaction = _interopRequireWildcard(__webpack_require__(12));
-	
-	/**
-	* Position
-	*
-	* @description Two-dimensional touch slider.
-	*
-	* @demo <span nexus-ui="position"></span>
-	*
-	* @example
-	* var position = new Nexus.Position('#target')
-	*
-	* @example
-	* var position = new Nexus.Position('#target',{
-	*   'size': [200,200],
-	*   'mode': 'absolute',  // "absolute" or "relative"
-	*   'x': 0.5,  // initial x value
-	*   'minX': 0,
-	*   'maxX': 1,
-	*   'stepX': 0,
-	*   'y': 0.5,  // initial y value
-	*   'minY': 0,
-	*   'maxY': 1,
-	*   'stepY': 0
-	* })
-	*
-	* @output
-	* change
-	* Fires any time the interface's value changes. <br>
-	* The event data is an object with x and y properties containing the x and y values of the interface.
-	*
-	* @outputexample
-	* position.on('change',function(v) {
-	*   console.log(v);
-	* })
-	*
-	*
-	*/
-	
-	var Position = (function (_Interface) {
-	  function Position() {
-	    _classCallCheck(this, Position);
-	
-	    var options = ["value"];
-	
-	    var defaults = {
-	      size: [200, 200],
-	      mode: "absolute",
-	      minX: 0,
-	      maxX: 1,
-	      stepX: 0,
-	      x: 0.5,
-	      minY: 0,
-	      maxY: 1,
-	      stepY: 0,
-	      y: 0.5
-	    };
-	
-	    _get(Object.getPrototypeOf(Position.prototype), "constructor", this).call(this, arguments, options, defaults);
-	
-	    this._x = new Step(this.settings.minX, this.settings.maxX, this.settings.stepX, this.settings.x);
-	    this._y = new Step(this.settings.minY, this.settings.maxY, this.settings.stepY, this.settings.y);
-	
-	    this.position = {
-	      x: new Interaction.Handle(this.settings.mode, "horizontal", [0, this.width], [this.height, 0]),
-	      y: new Interaction.Handle(this.settings.mode, "vertical", [0, this.width], [this.height, 0])
-	    };
-	    this.position.x.value = this._x.normalized;
-	    this.position.y.value = this._y.normalized;
-	
-	    this.init();
-	    this.render();
-	  }
-	
-	  _inherits(Position, _Interface);
-	
-	  _createClass(Position, {
-	    buildInterface: {
-	      value: function buildInterface() {
-	
-	        this.knob = svg.create("circle");
-	        this.element.appendChild(this.knob);
-	      }
-	    },
-	    sizeInterface: {
-	      value: function sizeInterface() {
-	
-	        this.position.x.resize([0, this.width], [this.height, 0]);
-	        this.position.y.resize([0, this.width], [this.height, 0]);
-	
-	        this._minDimension = Math.min(this.width, this.height);
-	
-	        this.knobRadius = {
-	          off: ~ ~(this._minDimension / 100) * 5 + 5 };
-	        this.knobRadius.on = this.knobRadius.off * 2;
-	
-	        this.knob.setAttribute("cx", this.width / 2);
-	        this.knob.setAttribute("cy", this.height / 2);
-	        this.knob.setAttribute("r", this.knobRadius.off);
-	      }
-	    },
-	    colorInterface: {
-	      value: function colorInterface() {
-	        this.element.style.backgroundColor = this.colors.fill;
-	        this.knob.setAttribute("fill", this.colors.accent);
-	      }
-	    },
-	    render: {
-	      value: function render() {
-	        if (this.clicked) {
-	          //  this.knobRadius = 30;
-	          this.knob.setAttribute("r", this.knobRadius.on);
-	        } else {
-	          //  this.knobRadius = 15;
-	          this.knob.setAttribute("r", this.knobRadius.off);
-	        }
-	
-	        this.knobCoordinates = {
-	          x: this._x.normalized * this.width,
-	          y: this.height - this._y.normalized * this.height
-	        };
-	
-	        this.knob.setAttribute("cx", this.knobCoordinates.x);
-	        this.knob.setAttribute("cy", this.knobCoordinates.y);
-	      }
-	    },
-	    click: {
-	      value: function click() {
-	        this.position.x.anchor = this.mouse;
-	        this.position.y.anchor = this.mouse;
-	        this.move();
-	      }
-	    },
-	    move: {
-	      value: function move() {
-	        if (this.clicked) {
-	          this.position.x.update(this.mouse);
-	          this.position.y.update(this.mouse);
-	          this._x.updateNormal(this.position.x.value);
-	          this._y.updateNormal(this.position.y.value);
-	          this.emit("change", {
-	            x: this._x.value,
-	            y: this._y.value
-	          });
-	          this.render();
-	        }
-	      }
-	    },
-	    release: {
-	      value: function release() {
-	        this.render();
-	      }
-	    },
-	    x: {
-	
-	      /**
-	      * The interface's x value. When set, it will automatically adjust to fit min/max/step settings of the interface.
-	      * @type {object}
-	      * @example position.x = 0.5;
-	      */
-	
-	      get: function () {
-	        return this._x.value;
-	      },
-	      set: function (value) {
-	        this._x.update(value);
-	        this.emit("change", {
-	          x: this._x.value,
-	          y: this._y.value
-	        });
-	        this.render();
-	      }
-	    },
-	    y: {
-	
-	      /**
-	      * The interface's y values. When set, it will automatically adjust to fit min/max/step settings of the interface.
-	      * @type {object}
-	      * @example position.x = 0.5;
-	      */
-	
-	      get: function () {
-	        return this._y.value;
-	      },
-	      set: function (value) {
-	        this._y.update(value);
-	        this.emit("change", {
-	          x: this._x.value,
-	          y: this._y.value
-	        });
-	        this.render();
-	      }
-	    },
-	    normalized: {
-	      get: function () {
-	        return {
-	          x: this._x.normalized,
-	          y: this._y.normalized
-	        };
-	      }
-	    },
-	    minX: {
-	
-	      /**
-	      * The lower limit of value on the x axis
-	      * @type {object}
-	      */
-	
-	      get: function () {
-	        return this._x.min;
-	      },
-	      set: function (v) {
-	        this._x.min = v;
-	        this.render();
-	      }
-	    },
-	    minY: {
-	
-	      /**
-	      * The lower limit of value on the y axis
-	      * @type {object}
-	      */
-	
-	      get: function () {
-	        return this._y.min;
-	      },
-	      set: function (v) {
-	        this._y.min = v;
-	        this.render();
-	      }
-	    },
-	    maxX: {
-	
-	      /**
-	      * The upper limit of value on the x axis
-	      * @type {object}
-	      */
-	
-	      get: function () {
-	        return this._x.max;
-	      },
-	      set: function (v) {
-	        this._x.max = v;
-	        this.render();
-	      }
-	    },
-	    maxY: {
-	
-	      /**
-	      * The upper limit of value on the y axis
-	      * @type {object}
-	      */
-	
-	      get: function () {
-	        return this._y.max;
-	      },
-	      set: function (v) {
-	        this._y.max = v;
-	        this.render();
-	      }
-	    },
-	    stepX: {
-	
-	      /**
-	      * The incremental step of values on the x axis
-	      * @type {object}
-	      */
-	
-	      get: function () {
-	        return this._x.step;
-	      },
-	      set: function (v) {
-	        this._x.step = v;
-	        this.render();
-	      }
-	    },
-	    stepY: {
-	
-	      /**
-	      * The incremental step of values on the y axis
-	      * @type {object}
-	      */
-	
-	      get: function () {
-	        return this._y.step;
-	      },
-	      set: function (v) {
-	        this._y.step = v;
-	        this.render();
-	      }
-	    },
-	    mode: {
-	
-	      /**
-	      Absolute mode (position's value jumps to mouse click position) or relative mode (mouse drag changes value relative to its current position). Default: "absolute".
-	      @type {string}
-	      @example position.mode = "relative";
-	      */
-	
-	      get: function () {
-	        return this.position.x.mode;
-	      },
-	      set: function (v) {
-	        this.position.x.mode = v;
-	        this.position.y.mode = v;
-	      }
-	    }
-	  });
-	
-	  return Position;
-	})(Interface);
-	
-	module.exports = Position;
-
-/***/ }),
-/* 4 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	"use strict";
-	
-	var math = __webpack_require__(5);
-	
-	module.exports = {
-	
-	  create: function (type) {
-	    return document.createElementNS("http://www.w3.org/2000/svg", type);
-	  },
-	
-	  arc: function (x, y, radius, startAngle, endAngle) {
-	
-	    var start = math.toCartesian(radius, endAngle);
-	    var end = math.toCartesian(radius, startAngle);
-	
-	    var largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
-	
-	    var d = ["M", start.x + x, start.y + y, "A", radius, radius, 0, largeArcFlag, 0, end.x + x, end.y + y].join(" ");
-	
-	    return d;
-	  },
-	
-	  radialGradient: function (defs, numberOfStops) {
-	
-	    var id = "gradient" + math.ri(100000000000);
-	    var stops = [];
-	
-	    var gradient = document.createElementNS("http://www.w3.org/2000/svg", "radialGradient");
-	    gradient.setAttribute("id", id);
-	    gradient.setAttribute("cx", "50%");
-	    gradient.setAttribute("cy", "50%");
-	    gradient.setAttribute("r", "50%");
-	
-	    defs.appendChild(gradient);
-	
-	    for (var i = 0; i < numberOfStops; i++) {
-	      var _stop = document.createElementNS("http://www.w3.org/2000/svg", "stop");
-	      _stop.setAttribute("id", "stop" + i);
-	      //stop.setAttribute('offset', '70%');
-	      //stop.setAttribute('stop-color', 'White');
-	      gradient.appendChild(_stop);
-	      stops.push(_stop);
-	    }
-	
-	    return {
-	      id: id,
-	      stops: stops,
-	      element: gradient
-	    };
-	  }
-	
-	};
-
-/***/ }),
-/* 5 */
-/***/ (function(module, exports) {
-
-	"use strict";
-	
-	/**
-	 * Limit a number to within a minimum and maximum
-	 * @param  {number} value Input value
-	 * @param  {number} min   Lower limit
-	 * @param  {number} max   Upper limit
-	 * @return {number}       The input value constrained within the lower and upper limits
-	 * @example
-	 * Nexus.clip(11,0,10)   // returns 10
-	 * Nexus.clip(-1,0,10)   // returns 0
-	 * Nexus.clip(5,0,10)    // returns 5
-	 */
-	
-	exports.clip = function (value, min, max) {
-	  return Math.min(Math.max(value, min), max);
-	};
-	
-	exports.normalize = function (value, min, max) {
-	  return (value - min) / (max - min);
-	};
-	
-	/**
-	 * Scale a value from one range to another range.
-	 * @param  {number} inNum  Input value
-	 * @param  {number} inMin  Input range minimum
-	 * @param  {number} inMax  Input range maximum
-	 * @param  {number} outMin Output range minimum
-	 * @param  {number} outMax Output range maximum
-	 * @return {number}        The input value scaled to its new range
-	 * @example
-	 * Nexus.scale(0.5,0,1,0,10)   // returns 5
-	 * Nexus.scale(0.9,0,1,1,0)    // returns 0.1
-	 */
-	exports.scale = function (inNum, inMin, inMax, outMin, outMax) {
-	  if (inMin === inMax) {
-	    return outMin;
-	  }
-	  return (inNum - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
-	};
-	
-	exports.toPolar = function (x, y) {
-	  var r = Math.sqrt(x * x + y * y);
-	
-	  var theta = Math.atan2(y, x);
-	  if (theta < 0) {
-	    theta = theta + 2 * Math.PI;
-	  }
-	  return { radius: r, angle: theta };
-	};
-	
-	exports.toCartesian = function (radius, angle) {
-	  var cos = Math.cos(angle);
-	  var sin = Math.sin(angle);
-	  return { x: radius * cos, y: radius * sin * -1 };
-	};
-	/*
-	exports.polarToCartesian(centerX, centerY, radius, angleInDegrees) {
-	  var angleInRadians = (angleInDegrees-90) * Math.PI / 180.0;
-	
-	  return {
-	    x: centerX + (radius * Math.cos(angleInRadians)),
-	    y: centerY + (radius * Math.sin(angleInRadians))
-	  };
-	}  */
-	
-	exports.prune = function (data, scale) {
-	  return parseFloat(data.toFixed(scale));
-	};
-	
-	exports.invert = function (inNum) {
-	  return exports.scale(inNum, 1, 0, 0, 1);
-	};
-	
-	/**
-	 * Convert a MIDi note number to a frequency value in equal temperament.
-	 * @param  {number} midi MIDI note value
-	 * @return {number}      Frequence value
-	 * @example
-	 * Nexus.mtof(60)  // returns the frequency number of Middle C
-	 */
-	exports.mtof = function (midi) {
-	  return Math.pow(2, (midi - 69) / 12) * 440;
-	};
-	
-	/**
-	 * Interpolate between two numbers
-	 * @param  {number} loc Interpolation index (0-1)
-	 * @param  {number} min Lower value
-	 * @param  {number} max Upper value
-	 * @return {number}     Interpolated value
-	 * @example
-	 * Nexus.interp(0.5,2,4)   // returns 3
-	 * Nexus.interp(0.1,0,10)     // returns 1
-	 */
-	exports.interp = function (loc, min, max) {
-	  return loc * (max - min) + min;
-	};
-	
-	/**
-	 * Return a random choice from a list of arguments
-	 * @return {various} One random argument
-	 * @example
-	 * Nexus.pick(1,2,3,4)   // returns 1, 2, 3, or 4
-	 * Nexus.pick(function1,function2)   // returns either function1 or function2
-	 */
-	exports.pick = function () {
-	  return arguments[~ ~(Math.random() * arguments.length)];
-	};
-	
-	/**
-	 * Returns an octave multiplier for frequency values
-	 * @param  {number} num Relative octave number (e.g. -1 for one octave down, 1 for one octave up)
-	 * @return {number}     Octave multiplier
-	 * @example
-	 * Nexus.octave(-1)  // returns 0.5
-	 * Nexus.octave(0)   // returns 1
-	 * Nexus.octave(1)   // returns 2
-	 * Nexus.octave(2)   // returns 4
-	 */
-	exports.octave = function (num) {
-	  return Math.pow(2, num);
-	};
-	
-	/**
-	 * Random integer generator. If no second argument is given, will return random integer from 0 to bound1.
-	 * @param  {number} bound1 Minimum random value
-	 * @param  {number} bound2 Maximum random value
-	 * @return {number}        Random integer between lower and upper boundary
-	 * @example
-	 * Nexus.ri(10)    // returns random int from 0 to 10
-	 * Nexus.ri(20,2000) // returns random int from 20 to 2000
-	 */
-	exports.ri = function (bound1, bound2) {
-	  if (!bound2) {
-	    bound2 = bound1;
-	    bound1 = 0;
-	  }
-	  var low = Math.min(bound1, bound2);
-	  var high = Math.max(bound1, bound2);
-	  return Math.floor(Math.random() * (high - low) + low);
-	};
-	
-	/**
-	 * Random float number generator. If no second argument is given, will return random float from 0 to bound1.
-	 * @param  {number} bound1 Minimum random value
-	 * @param  {number} bound2 Maximum random value
-	 * @return {number}        Random float between lower and upper boundary
-	 * @example
-	 * Nexus.rf(1)    // returns random float from 0 to 1
-	 * Nexus.rf(1,2) // returns random float from 1 to 2
-	 */
-	exports.rf = function (bound1, bound2) {
-	  if (!bound2) {
-	    bound2 = bound1;
-	    bound1 = 0;
-	  }
-	  var low = Math.min(bound1, bound2);
-	  var high = Math.max(bound1, bound2);
-	  return Math.random() * (high - low) + low;
-	};
-	
-	exports.cycle = function (input, min, max) {
-	  input++;
-	  if (input >= max) {
-	    input = min;
-	  }
-	  return input;
-	};
-	
-	/**
-	 * Average an array of numbers
-	 * @param  {Array} data Array of numbers to average
-	 * @return {number}      Average of the input data
-	 * @example
-	 * Nexus.average([0,2,4,6,8,10])   // returns 5
-	 */
-	exports.average = function (data) {
-	  var total = 0;
-	  for (var i = 0; i < data.length; i++) {
-	    total += data[i];
-	  }
-	  return total / data.length;
-	};
-	
-	/**
-	 * Get the distance from one (x,y) point to another (x,y) point
-	 * @param  {number} x1 x of first point
-	 * @param  {number} y1 y of first point
-	 * @param  {number} x2 x of second point
-	 * @param  {number} y2 y of second poiny
-	 * @return {number}    Distance
-	 * @example
-	 * Nexus.distance(0,0,3,4)   // returns 5
-	 */
-	exports.distance = function (x1, y1, x2, y2) {
-	  var a = x1 - x2;
-	  var b = y1 - y2;
-	  return Math.sqrt(a * a + b * b);
-	};
-	
-	exports.gainToDB = function (gain) {
-	  return 20 * Math.log10(gain);
-	};
-	
-	/**
-	 * Flip a coin, returning either 0 or 1 according to a probability
-	 * @param  {number} [odds=0.5] Likelihood of returning 1
-	 * @return {number}            1 or 0
-	 * @example
-	 * Nexus.coin(0.1)   // returns 1 (10% of the time) or 0 (90% of the time)
-	 */
-	exports.coin = function () {
-	  var odds = arguments[0] === undefined ? 0.5 : arguments[0];
-	
-	  if (exports.rf(0, 1) < odds) {
-	    return 1;
-	  } else {
-	    return 0;
-	  }
-	};
-
-/***/ }),
-/* 6 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	"use strict";
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _get = function get(object, property, receiver) { var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { return get(parent, property, receiver); } } else if ("value" in desc && desc.writable) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } };
-	
-	var _inherits = function (subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) subClass.__proto__ = superClass; };
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var svg = __webpack_require__(4);
-	var dom = __webpack_require__(7);
-	var util = __webpack_require__(8);
-	var touch = __webpack_require__(9);
-	var EventEmitter = __webpack_require__(10);
-	
-	var colors = __webpack_require__(1).colors;
-	
-	/**
-	Interface
-	*/
-	
-	var Interface = (function (_EventEmitter) {
-	  function Interface(args, options, defaults) {
-	    _classCallCheck(this, Interface);
-	
-	    _get(Object.getPrototypeOf(Interface.prototype), "constructor", this).call(this);
-	    this.type = this.constructor.name;
-	    this.settings = this.parseSettings(args, options, defaults);
-	    this.mouse = {};
-	    this.wait = false;
-	    this.colors = {};
-	    var defaultColors = colors(); // jshint ignore:line
-	    this.colors.accent = defaultColors.accent;
-	    this.colors.fill = defaultColors.fill;
-	    this.colors.light = defaultColors.light;
-	    this.colors.dark = defaultColors.dark;
-	    this.colors.mediumLight = defaultColors.mediumLight;
-	    this.colors.mediumDark = defaultColors.mediumDark;
-	  }
-	
-	  _inherits(Interface, _EventEmitter);
-	
-	  _createClass(Interface, {
-	    parseSettings: {
-	      value: function parseSettings(args, options, defaults) {
-	
-	        options.unshift("target");
-	        defaults.defaultSize = defaults.size.splice(0, 2);
-	        defaults.size = false;
-	
-	        var settings = {
-	          target: document.body,
-	          colors: {}, // should inherit from a colors module,
-	          snapWithParent: true,
-	          event: function event() {},
-	          component: false
-	        };
-	
-	        for (var key in defaults) {
-	          settings[key] = defaults[key];
-	        }
-	
-	        for (var i = 0; i < args.length; i++) {
-	          // grabs the next argument
-	          var setting = args[i];
-	          // if it's an object, it must be the settings object
-	          if (util.isObject(setting)) {
-	            for (var key in setting) {
-	              settings[key] = setting[key];
-	            }
-	            // if it's a function, it must be the event setting
-	          } else if (typeof setting === "function") {
-	            settings.event = setting;
-	            // otherwise, consider it one of the widget's custom options
-	          } else if (options.length >= 1) {
-	            // grab the first option -- i.e. 'target'
-	            var key = options.splice(0, 1)[0];
-	            settings[key] = setting;
-	          }
-	        }
-	
-	        /*  handle common settings  */
-	
-	        // target
-	        this.parent = dom.parseElement(settings.target);
-	
-	        // nexus-ui attribute
-	        if (this.parent && this.parent instanceof HTMLElement && !settings.component) {
-	          if (!this.parent.hasAttribute("nexus-ui")) {
-	            this.parent.setAttribute("nexus-ui", "");
-	          }
-	        }
-	
-	        // size
-	
-	        if (settings.size && Array.isArray(settings.size) && settings.snapWithParent) {
-	          this.width = settings.size[0];
-	          this.height = settings.size[1];
-	          this.parent.style.width = this.width + "px";
-	          this.parent.style.height = this.height + "px";
-	        } else if (settings.snapWithParent && !settings.component) {
-	
-	          this.width = parseFloat(window.getComputedStyle(this.parent, null).getPropertyValue("width").replace("px", ""));
-	          this.height = parseFloat(window.getComputedStyle(this.parent, null).getPropertyValue("height").replace("px", ""));
-	
-	          if (this.width == 5000) {
-	            this.width = settings.defaultSize[0];
-	            this.parent.style.width = this.parent.width = this.width + "px";
-	          }
-	          if (this.height == 5000) {
-	            this.height = settings.defaultSize[1];
-	            this.parent.style.height = this.parent.height = this.height + "px";
-	          }
-	        } else {
-	          settings.size = settings.defaultSize;
-	          this.width = settings.size[0];
-	          this.height = settings.size[1];
-	        }
-	
-	        // event
-	        if (settings.event) {
-	          this.event = this.on("change", settings.event);
-	        } else {
-	          this.event = false;
-	        }
-	
-	        return settings;
-	      }
-	    },
-	    init: {
-	      value: function init() {
-	        this.buildFrame();
-	        this.buildInterface();
-	        this.sizeInterface();
-	        this.attachListeners();
-	        this.colorInterface();
-	        this.finalTouches();
-	      }
-	    },
-	    buildFrame: {
-	      value: function buildFrame() {
-	        this.element = svg.create("svg");
-	        this.element.setAttribute("width", this.width);
-	        this.element.setAttribute("height", this.height);
-	        this.parent.appendChild(this.element);
-	      }
-	    },
-	    buildInterface: {
-	      value: function buildInterface() {}
-	    },
-	    sizeInterface: {
-	      value: function sizeInterface() {}
-	    },
-	    colorInterface: {
-	      value: function colorInterface() {}
-	    },
-	    attachListeners: {
-	      value: function attachListeners() {
-	        var _this = this;
-	
-	        this.interactionTarget = this.interactionTarget || this.element;
-	
-	        // Setup interaction
-	        if (touch.exists) {
-	          this.interactionTarget.addEventListener("touchstart", function (evt) {
-	            return _this.preTouch(evt);
-	          });
-	          this.interactionTarget.addEventListener("touchmove", function (evt) {
-	            return _this.preTouchMove(evt);
-	          });
-	          this.interactionTarget.addEventListener("touchend", function (evt) {
-	            return _this.preTouchRelease(evt);
-	          });
-	        }
-	        this.boundPreMove = function (evt) {
-	          return _this.preMove(evt);
-	        };
-	        this.boundPreRelease = function (evt) {
-	          return _this.preRelease(evt);
-	        };
-	        this.interactionTarget.addEventListener("mousedown", function (evt) {
-	          return _this.preClick(evt);
-	        });
-	      }
-	    },
-	    finalTouches: {
-	      value: function finalTouches() {
-	        this.element.style.cursor = "pointer";
-	      }
-	    },
-	    preClick: {
-	      value: function preClick(e) {
-	        // 10000 getComputedStyle calls takes 100 ms.
-	        // .:. one takes about .01ms
-	        if (this.element instanceof HTMLElement) {
-	          this.width = window.getComputedStyle(this.element, null).getPropertyValue("width").replace("px", "");
-	        }
-	        // 10000 getComputedStyle calls takes 40 ms.
-	        // .:. one takes about .004ms
-	        this.offset = dom.findPosition(this.element);
-	        this.mouse = dom.locateMouse(e, this.offset);
-	        this.clicked = true;
-	        this.click();
-	        this.moveEvent = document.addEventListener("mousemove", this.boundPreMove);
-	        this.releaseEvent = document.addEventListener("mouseup", this.boundPreRelease);
-	        this.emit("click");
-	        e.preventDefault();
-	        e.stopPropagation();
-	      }
-	    },
-	    preMove: {
-	      value: function preMove(e) {
-	        var _this = this;
-	
-	        if (!this.wait) {
-	          this.mouse = dom.locateMouse(e, this.offset);
-	          this.move();
-	          this.wait = true;
-	          setTimeout(function () {
-	            _this.wait = false;
-	          }, 25);
-	        }
-	        e.preventDefault();
-	        e.stopPropagation();
-	      }
-	    },
-	    preRelease: {
-	      value: function preRelease(e) {
-	        this.mouse = dom.locateMouse(e, this.offset);
-	        this.clicked = false;
-	        this.release();
-	        this.emit("release");
-	        document.removeEventListener("mousemove", this.boundPreMove);
-	        document.removeEventListener("mouseup", this.boundPreRelease);
-	        e.preventDefault();
-	        e.stopPropagation();
-	      }
-	    },
-	    click: {
-	      value: function click() {}
-	    },
-	    move: {
-	      value: function move() {}
-	    },
-	    release: {
-	      value: function release() {}
-	    },
-	    preTouch: {
-	
-	      /* touch */
-	
-	      value: function preTouch(e) {
-	        if (this.element instanceof HTMLElement) {
-	          this.width = window.getComputedStyle(this.element, null).getPropertyValue("width").replace("px", "");
-	        }
-	        this.offset = dom.findPosition(this.element);
-	        this.mouse = dom.locateTouch(e, this.offset);
-	        this.clicked = true;
-	        this.touch(e);
-	        this.emit("click");
-	        e.preventDefault();
-	        e.stopPropagation();
-	      }
-	    },
-	    preTouchMove: {
-	      value: function preTouchMove(e) {
-	        if (this.clicked) {
-	          this.mouse = dom.locateTouch(e, this.offset);
-	          this.touchMove();
-	          e.preventDefault();
-	          e.stopPropagation();
-	        }
-	      }
-	    },
-	    preTouchRelease: {
-	      value: function preTouchRelease(e) {
-	        this.mouse = dom.locateTouch(e, this.offset);
-	        this.clicked = false;
-	        this.touchRelease();
-	        this.emit("release");
-	        e.preventDefault();
-	        e.stopPropagation();
-	      }
-	    },
-	    touch: {
-	      value: function touch() {
-	        this.click();
-	      }
-	    },
-	    touchMove: {
-	      value: function touchMove() {
-	        this.move();
-	      }
-	    },
-	    touchRelease: {
-	      value: function touchRelease() {
-	        this.release();
-	      }
-	    },
-	    resize: {
-	
-	      /**
-	      * Resize the interface
-	      * @param width {number} New width in pixels
-	      * @param height {number} New height in pixels
-	      *
-	      * @example
-	      * button.resize(100,100);
-	      */
-	
-	      value: function resize(width, height) {
-	        this.width = width;
-	        this.height = height;
-	        this.parent.style.width = this.width + "px";
-	        this.parent.style.height = this.height + "px";
-	        this.element.setAttribute("width", this.width);
-	        this.element.setAttribute("height", this.height);
-	        this.sizeInterface();
-	      }
-	    },
-	    empty: {
-	      value: function empty() {
-	        while (this.element.lastChild) {
-	          this.element.removeChild(this.element.lastChild);
-	        }
-	      }
-	    },
-	    destroy: {
-	
-	      /**
-	      * Remove the interface from the page and cancel its event listener(s).
-	      *
-	      * @example
-	      * button.destroy();
-	      */
-	
-	      value: function destroy() {
-	        this.empty();
-	        this.parent.removeChild(this.element);
-	        this.removeAllListeners();
-	        if (this.instrument) {
-	          delete this.instrument[this.id];
-	        }
-	        this.customDestroy();
-	      }
-	    },
-	    customDestroy: {
-	      value: function customDestroy() {}
-	    },
-	    colorize: {
-	      value: function colorize(type, color) {
-	        this.colors[type] = color;
-	        this.colorInterface();
-	      }
-	    }
-	  });
-	
-	  return Interface;
-	})(EventEmitter);
-	
-	module.exports = Interface;
-
-/***/ }),
-/* 7 */
-/***/ (function(module, exports) {
-
-	"use strict";
-	
-	exports.findPosition = function (el) {
-	  var viewportOffset = el.getBoundingClientRect();
-	  var top = viewportOffset.top + window.scrollY;
-	  var left = viewportOffset.left + window.scrollX;
-	  return { top: top, left: left };
-	};
-	
-	exports.parseElement = function (parent) {
-	  if (typeof parent === "string") {
-	    parent = document.getElementById(parent.replace("#", ""));
-	  }
-	
-	  if (parent instanceof HTMLElement || parent instanceof SVGElement) {
-	    return parent;
-	  } else {
-	    return "No valid parent argument";
-	  }
-	};
-	
-	exports.locateMouse = function (e, offset) {
-	  return {
-	    x: e.pageX - offset.left,
-	    y: e.pageY - offset.top
-	  };
-	};
-	
-	exports.locateTouch = function (e, offset) {
-	  return {
-	    x: e.targetTouches.length ? e.targetTouches[0].pageX - offset.left : false,
-	    y: e.targetTouches.length ? e.targetTouches[0].pageY - offset.top : false
-	  };
-	};
-	
-	exports.SmartCanvas = function (parent) {
-	  var _this = this;
-	
-	  this.element = document.createElement("canvas");
-	  this.context = this.element.getContext("2d");
-	  parent.appendChild(this.element);
-	
-	  this.resize = function (w, h) {
-	    _this.element.width = w * 2;
-	    _this.element.height = h * 2;
-	    _this.element.style.width = w + "px";
-	    _this.element.style.height = h + "px";
-	  };
-	};
-
-/***/ }),
-/* 8 */
-/***/ (function(module, exports) {
-
-	"use strict";
-	
-	exports.isObject = function (obj) {
-	  if (typeof obj === "object" && !Array.isArray(obj) && obj !== null && obj instanceof SVGElement === false && obj instanceof HTMLElement === false) {
-	    return true;
-	  } else {
-	    return false;
-	  }
-	};
-
-/***/ }),
-/* 9 */
-/***/ (function(module, exports) {
-
-	"use strict";
-	
-	exports.exists = "ontouchstart" in document.documentElement;
-
-/***/ }),
-/* 10 */
-/***/ (function(module, exports) {
-
-	// Copyright Joyent, Inc. and other Node contributors.
-	//
-	// Permission is hereby granted, free of charge, to any person obtaining a
-	// copy of this software and associated documentation files (the
-	// "Software"), to deal in the Software without restriction, including
-	// without limitation the rights to use, copy, modify, merge, publish,
-	// distribute, sublicense, and/or sell copies of the Software, and to permit
-	// persons to whom the Software is furnished to do so, subject to the
-	// following conditions:
-	//
-	// The above copyright notice and this permission notice shall be included
-	// in all copies or substantial portions of the Software.
-	//
-	// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-	// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-	// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
-	// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-	// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-	// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
-	// USE OR OTHER DEALINGS IN THE SOFTWARE.
-	
-	function EventEmitter() {
-	  this._events = this._events || {};
-	  this._maxListeners = this._maxListeners || undefined;
-	}
-	module.exports = EventEmitter;
-	
-	// Backwards-compat with node 0.10.x
-	EventEmitter.EventEmitter = EventEmitter;
-	
-	EventEmitter.prototype._events = undefined;
-	EventEmitter.prototype._maxListeners = undefined;
-	
-	// By default EventEmitters will print a warning if more than 10 listeners are
-	// added to it. This is a useful default which helps finding memory leaks.
-	EventEmitter.defaultMaxListeners = 10;
-	
-	// Obviously not all Emitters should be limited to 10. This function allows
-	// that to be increased. Set to zero for unlimited.
-	EventEmitter.prototype.setMaxListeners = function(n) {
-	  if (!isNumber(n) || n < 0 || isNaN(n))
-	    throw TypeError('n must be a positive number');
-	  this._maxListeners = n;
-	  return this;
-	};
-	
-	EventEmitter.prototype.emit = function(type) {
-	  var er, handler, len, args, i, listeners;
-	
-	  if (!this._events)
-	    this._events = {};
-	
-	  // If there is no 'error' event listener then throw.
-	  if (type === 'error') {
-	    if (!this._events.error ||
-	        (isObject(this._events.error) && !this._events.error.length)) {
-	      er = arguments[1];
-	      if (er instanceof Error) {
-	        throw er; // Unhandled 'error' event
-	      } else {
-	        // At least give some kind of context to the user
-	        var err = new Error('Uncaught, unspecified "error" event. (' + er + ')');
-	        err.context = er;
-	        throw err;
-	      }
-	    }
-	  }
-	
-	  handler = this._events[type];
-	
-	  if (isUndefined(handler))
-	    return false;
-	
-	  if (isFunction(handler)) {
-	    switch (arguments.length) {
-	      // fast cases
-	      case 1:
-	        handler.call(this);
-	        break;
-	      case 2:
-	        handler.call(this, arguments[1]);
-	        break;
-	      case 3:
-	        handler.call(this, arguments[1], arguments[2]);
-	        break;
-	      // slower
-	      default:
-	        args = Array.prototype.slice.call(arguments, 1);
-	        handler.apply(this, args);
-	    }
-	  } else if (isObject(handler)) {
-	    args = Array.prototype.slice.call(arguments, 1);
-	    listeners = handler.slice();
-	    len = listeners.length;
-	    for (i = 0; i < len; i++)
-	      listeners[i].apply(this, args);
-	  }
-	
-	  return true;
-	};
-	
-	EventEmitter.prototype.addListener = function(type, listener) {
-	  var m;
-	
-	  if (!isFunction(listener))
-	    throw TypeError('listener must be a function');
-	
-	  if (!this._events)
-	    this._events = {};
-	
-	  // To avoid recursion in the case that type === "newListener"! Before
-	  // adding it to the listeners, first emit "newListener".
-	  if (this._events.newListener)
-	    this.emit('newListener', type,
-	              isFunction(listener.listener) ?
-	              listener.listener : listener);
-	
-	  if (!this._events[type])
-	    // Optimize the case of one listener. Don't need the extra array object.
-	    this._events[type] = listener;
-	  else if (isObject(this._events[type]))
-	    // If we've already got an array, just append.
-	    this._events[type].push(listener);
-	  else
-	    // Adding the second element, need to change to array.
-	    this._events[type] = [this._events[type], listener];
-	
-	  // Check for listener leak
-	  if (isObject(this._events[type]) && !this._events[type].warned) {
-	    if (!isUndefined(this._maxListeners)) {
-	      m = this._maxListeners;
+	    if (this.motionLR<0) {
+			beginPath()
+				moveTo(this.GUI.w/2,this.GUI.h/2)
+				arc(this.GUI.w/2,this.GUI.h/2,this.GUI.w/2,eighth*7,eighth*1,false)
+				globalAlpha = Math.pow(this.motionLR, 2)
+				fill()
+			closePath()
 	    } else {
-	      m = EventEmitter.defaultMaxListeners;
+			beginPath()
+				moveTo(this.GUI.w/2,this.GUI.h/2)
+				arc(this.GUI.w/2,this.GUI.h/2,this.GUI.w/2,eighth*3,eighth*5,false)
+				globalAlpha = Math.pow(this.motionLR, 2)
+				fill()
+			closePath()
 	    }
+		beginPath()
+			moveTo(this.GUI.w/2,this.GUI.h/2)
+			arc(this.GUI.w/2,this.GUI.h/2,this.GUI.w/6,0,Math.PI*2,false)
+			globalAlpha = Math.pow(this.z, 2)
+			fill()
+		closePath()
+		globalAlpha = 1
+	}
+	this.drawLabel();
+}
+
+motion.prototype.click = function() {
+	this.active = !this.active;
+	this.draw()
+}
+
+motion.prototype.customDestroy = function() {
+	this.active = false;
+	window.removeEventListener("devicemotion",this.motionlistener,false);
+}
+},{"../core/widget":3,"../utils/math":6,"util":51}],27:[function(require,module,exports){
+var util = require('util');
+var widget = require('../core/widget');
+var math = require('../utils/math');
+
+/** 
+	@class mouse      
+	Mouse tracker, relative to web browser window.
+	```html
+	<canvas nx="mouse"></canvas>
+	```
+	<canvas nx="mouse" style="margin-left:25px"></canvas>
+*/
+
+var mouse = module.exports = function (target) {
 	
-	    if (m && m > 0 && this._events[type].length > m) {
-	      this._events[type].warned = true;
-	      console.error('(node) warning: possible EventEmitter memory ' +
-	                    'leak detected. %d listeners added. ' +
-	                    'Use emitter.setMaxListeners() to increase limit.',
-	                    this._events[type].length);
-	      if (typeof console.trace === 'function') {
-	        // not supported in IE 10
-	        console.trace();
-	      }
-	    }
+	this.defaultSize = { width: 98, height: 100 };
+	widget.call(this, target);
+
+	/** @property {object}  val   
+		| &nbsp; | data
+		| --- | ---
+		| *x* | x value of mouse relative to browser
+		| *y* | y value of mouse relative to browser
+		| *deltax* | x change in mouse from last position
+		| *deltay* | y change in mouse from last position
+	*/
+	this.val = {
+		x: 0,
+		y: 0,
+		deltax: 0, 
+		deltay: 0
+	}
+	this.inside = new Object();
+	this.boundmove = this.preMove.bind(this)
+	this.mousing = window.addEventListener("mousemove", this.boundmove, false);
+	
+	this.init();
+}
+util.inherits(mouse, widget);
+
+mouse.prototype.init = function() {
+	
+	this.inside.height = this.GUI.h;
+	this.inside.width = this.GUI.w;
+	this.inside.left = 0;
+	this.inside.top = 0;
+	this.inside.quarterwid = (this.inside.width)/4;
+	 
+	this.draw();
+}
+
+mouse.prototype.draw = function() {
+	this.erase();
+
+	with (this.context) {
+		fillStyle = this.colors.fill;
+		fillRect(0,0,this.GUI.w,this.GUI.h); 
+
+		var scaledx = -(this.val.x) * this.GUI.h;
+		var scaledy = -(this.val.y) * this.GUI.h;
+		var scaleddx = -(this.val.deltax) * this.GUI.h - this.GUI.h/2;
+		var scaleddy = -(this.val.deltay) * this.GUI.h - this.GUI.h/2;
+
+		fillStyle = this.colors.accent;
+		fillRect(this.inside.left, this.inside.height, this.inside.quarterwid, scaledx);
+		fillRect(this.inside.quarterwid, this.inside.height, this.inside.quarterwid, scaledy);
+		fillRect(this.inside.quarterwid*2, this.inside.height, this.inside.quarterwid, scaleddx);
+		fillRect(this.inside.quarterwid*3, this.inside.height, this.inside.quarterwid, scaleddy);
+
+		globalAlpha = 1;
+		fillStyle = this.colors.fill;
+		textAlign = "center";
+		font = this.GUI.w/7+"px "+this.font;
+/*  fillText("x", this.inside.quarterwid*0 + this.inside.quarterwid/2, this.GUI.h-7);
+		fillText("y", this.inside.quarterwid*1 + this.inside.quarterwid/2, this.GUI.h-7);
+		fillText("dx", this.inside.quarterwid*2 + this.inside.quarterwid/2, this.GUI.h-7);
+		fillText("dy", this.inside.quarterwid*3 + this.inside.quarterwid/2, this.GUI.h-7);
+*/
+		globalAlpha = 1;
+	}
+	
+	this.drawLabel();
+}
+
+mouse.prototype.move = function(e) {
+	this.val = {
+		deltax: e.clientX/window.innerWidth - this.val.x,
+		deltay: math.invert(e.clientY/window.innerHeight) - this.val.y,
+		x: e.clientX/window.innerWidth,
+		y: math.invert(e.clientY/window.innerHeight)
+	}
+	this.draw();
+	this.transmit(this.val);
+
+}
+
+mouse.prototype.customDestroy = function() {
+	window.removeEventListener("mousemove",  this.boundmove, false);
+}
+},{"../core/widget":3,"../utils/math":6,"util":51}],28:[function(require,module,exports){
+var math = require('../utils/math')
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class multislider      
+	Multiple vertical sliders in one interface.
+	```html
+	<canvas nx="multislider"></canvas>
+	```
+	<canvas nx="multislider" style="margin-left:25px"></canvas>
+*/
+var multislider = module.exports = function (target) {
+	
+	this.defaultSize = { width: 100, height: 75 };
+	widget.call(this, target);
+	
+	/** @property {integer} sliders Number of sliders in the multislider. (Must call .init() after changing this setting, or set with .setNumberOfSliders) */
+	this.sliders = 15;
+
+	/** @property {array}  val   Array of slider values. <br> **Note:** This widget's output is not .val! Transmitted output is:	
+
+		| &nbsp; | data
+		| --- | ---
+		| *(slider index)* | value of currently changed slider
+		| list | all multislider values as list. (if the interface sends to js or node, this list will be an array. if sending to ajax, max7, etc, the list will be a string of space-separated values)
+
+	*/
+	
+	this.sliderClicked = 0;
+	this.oldSliderToMove;
+	this.init();
+}
+util.inherits(multislider, widget);
+
+multislider.prototype.init = function() {
+	this.val = new Array();
+	for (var i=0;i<this.sliders;i++) {
+		this.val[i] = 0.7;
+	}
+	this.realSpace = { x: this.GUI.w, y: this.GUI.h }
+	this.sliderWidth = this.realSpace.x/this.sliders;
+	this.draw();
+}
+
+multislider.prototype.draw = function() {
+	this.erase();
+	with (this.context) {
+		fillStyle = this.colors.fill;
+		fillRect(0,0,this.GUI.w,this.GUI.h);
+		
+		strokeStyle = this.colors.accent;
+		fillStyle = this.colors.accent;
+		lineWidth = 5;
+    	
+		for(var i=0; i<this.sliders; i++) {
+			beginPath();
+			moveTo(i*this.sliderWidth, this.GUI.h-this.val[i]*this.GUI.h);
+			lineTo(i*this.sliderWidth + this.sliderWidth, this.GUI.h-this.val[i]*this.GUI.h);
+			stroke();
+			lineTo(i*this.sliderWidth + this.sliderWidth, this.GUI.h);
+			lineTo(i*this.sliderWidth,  this.GUI.h);
+			globalAlpha = 0.3 - (i%3)*0.1;
+			fill();
+			closePath(); 
+			globalAlpha = 1;
+		//	var separation = i==this.sliders-1 ? 0 : 1;
+		//	fillRect(i*this.sliderWidth, this.GUI.h-this.val[i]*this.GUI.h, this.sliderWidth-separation, this.val[i]*this.GUI.h)
+		}
+	}
+	this.drawLabel();
+}
+
+multislider.prototype.click = function() {
+	this.oldSliderToMove = false;
+	this.move(true);
+}
+
+multislider.prototype.move = function(firstclick) {
+	if (this.clicked) {
+
+
+		if (this.clickPos.touches.length>1) {
+
+			for (var i=0;i<this.clickPos.touches.length;i++) {
+				var sliderToMove = Math.floor(this.clickPos.touches[i].x / this.sliderWidth);
+				sliderToMove = math.clip(sliderToMove,0,this.sliders-1);
+				this.val[sliderToMove] = math.clip(math.invert((this.clickPos.touches[i].y / this.GUI.h)),0,1);
+			}
+
+		} else {
+
+			var sliderToMove = Math.floor(this.clickPos.x / this.sliderWidth);
+			sliderToMove = math.clip(sliderToMove,0,this.sliders-1);
+			this.val[sliderToMove] = math.clip(math.invert(this.clickPos.y / this.GUI.h),0,1);
+
+			if (this.oldSliderToMove && this.oldSliderToMove > sliderToMove + 1) {
+				var missed = this.oldSliderToMove - sliderToMove - 1;
+				for (var i=1;i<=missed;i++) {
+					this.val[sliderToMove+i] = this.val[sliderToMove] + (this.val[this.oldSliderToMove] - this.val[sliderToMove]) * ((i/(missed+1)));
+				}
+			} else if (this.oldSliderToMove && sliderToMove > this.oldSliderToMove + 1) {
+				var missed = sliderToMove - this.oldSliderToMove - 1;
+				for (var i=1;i<=missed;i++) {
+					this.val[this.oldSliderToMove+i] = this.val[this.oldSliderToMove] + (this.val[sliderToMove] - this.val[this.oldSliderToMove]) * ((i/(missed+1)));
+				}
+			}
+		
+		}
+		this.draw();
+	}
+	var msg = new Object()
+	msg[sliderToMove] = this.val[sliderToMove]
+	if (this.destination=="js" || this.destination=="node") {
+		msg["list"] = this.val;
+	} else {
+		msg["list"] = new String();
+		for (var key in this.val) { msg["list"] += this.val[key] + " " }
+	}
+	this.transmit(msg);
+	this.oldSliderToMove = sliderToMove;
+	
+}
+
+/** @method setNumberOfSliders
+@param {integer} [num] New number of sliders in the multislider */
+multislider.prototype.setNumberOfSliders = function(numOfSliders) {
+	this.sliders = numOfSliders;
+	this.val = new Array();
+	for (var i=0;i<this.sliders;i++) {
+		this.val.push(0.7);
+	}
+	this.sliderWidth = this.realSpace.x/this.sliders;
+	this.init();
+}
+
+/** @method setSliderValue
+Sets a slider to new value and transmits.
+@param {integer} [slider] Slider to set (slider index starts at 0)
+@param {integer} [value] New slider value */
+multislider.prototype.setSliderValue = function(slider,value) {
+	this.val[slider] = value;
+	this.draw();
+	var msg = new Object();
+	msg[slider] = this.val[slider]
+	if (this.destination=="js" || this.destination=="node") {
+		msg["list"] = this.val;
+	} else {
+		msg["list"] = new String();
+		for (var key in this.val) { msg["list"] += this.val[key] + " " }
+	}
+	this.transmit(msg);
+}
+
+},{"../core/widget":3,"../utils/math":6,"util":51}],29:[function(require,module,exports){
+var math = require('../utils/math');
+var drawing = require('../utils/drawing');
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class multitouch      
+	Multitouch 2d-slider with up to 5 points of touch.
+	```html
+	<canvas nx="multitouch"></canvas>
+	```
+	<canvas nx="multitouch" style="margin-left:25px"></canvas>
+*/
+
+var multitouch = module.exports = function (target) {
+	
+	this.defaultSize = { width: 200, height: 200 };
+	widget.call(this, target);
+	
+	//unique attributes
+	this.nodeSize = this.GUI.w/10;
+
+	/** @property {object}  val   
+		| &nbsp; | data
+		| --- | ---
+		| *touch1.x* | x position of first touch
+		| *touch1.y* | y position of first touch
+		| *touch2.x* | x position of second touch (if 2 touches)
+		| *touch2.y* | y position of second touch (if 2 touches)
+		| *etc* | &nbsp;
+	*/
+	this.val = {
+		touch1: {
+			x: 0,
+			y: 0
+		}
+	}
+	
+	this.nodes = new Array();
+	
+	/** @property {string}  text  Text that will show when object is static */
+	this.text = "multitouch";
+
+	this.rainbow = ["#00f", "#04f", "#08F", "0AF", "0FF"];
+	
+	/** @property {string}  mode   "normal" or "matrix" mode. "matrix" mode has a GUI of discrete touch areas.
+	*/
+	this.mode = "normal";
+
+	/** @property {integer}  rows   How many rows in the matrix (matrix mode only)
+	*/
+	this.rows = 10;
+
+	/** @property {integer}  cols   How many rows in the matrix (matrix mode only)
+	*/
+	this.cols = 10;
+
+	/** @property {array}  matrixLabels  An array of strings that can provide text labels on cells of the matrix. If shorter than the matrix cells, the array will repeat.
+	```
+		this.mode = "matrix"
+		this.matrixLabels = [ "A", "A#", "B", "C" ]
+		this.init();
+	```
+	*/
+	this.matrixLabels = false;
+
+	this.init();
+}
+util.inherits(multitouch, widget);
+
+multitouch.prototype.init = function() {
+	this.nodeSize = this.GUI.w/10;
+	this.draw();
+}
+
+multitouch.prototype.draw = function() {
+	this.erase();
+	with (this.context) {
+		fillStyle = this.colors.fill;
+		fillRect(0,0,this.GUI.w,this.GUI.h);
+
+		var count = 0;
+
+		if (this.mode == "matrix") {
+			for (var j=0;j<this.rows;j++) {
+				for (var i=0;i<this.cols;i++) {
+					with (this.context) {
+						beginPath();
+							fillStyle = this.colors.accent;
+							strokeStyle = this.colors.border;
+							lineWidth = 1;
+							var circx = i*this.GUI.w/this.cols + (this.GUI.w/this.cols)/2;
+							var circy = j*this.GUI.h/this.rows + (this.GUI.h/this.rows)/2;
+							arc(circx, circy, (this.GUI.h/this.rows)/2, 0, Math.PI*2, true);					
+							stroke();
+							fillStyle = this.colors.border;
+							textAlign = "center";
+							textBaseline = "middle";
+							if (this.matrixLabels) {
+								fillText(this.matrixLabels[count%this.matrixLabels.length], circx, circy);
+								count++
+							} 
+							var thisarea = {
+								x: i*this.GUI.w/this.cols,
+								y: j*this.GUI.h/this.rows,
+								w: this.GUI.w/this.cols,
+								h: this.GUI.h/this.rows
+							}
+							if (this.clickPos.touches.length>=1) {
+								for (var k=0;k<this.clickPos.touches.length;k++) {
+									if (drawing.isInside(this.clickPos.touches[k],thisarea)) {
+										globalAlpha=0.5;
+										fillStyle = this.colors.accent;
+										fill();
+										globalAlpha=0.3;
+										fillStyle = this.rainbow[k];
+										fill();
+										globalAlpha=1;
+									}
+								}
+							}
+						closePath();
+					}
+				}
+			}
+		} else {
+			if (this.clickPos.touches.length>=1) {
+				for (var i=0;i<this.clickPos.touches.length;i++) {
+					
+					with (this.context) {
+						globalAlpha=0.5;
+						beginPath();
+						fillStyle = this.colors.accent;
+						strokeStyle = this.colors.border;
+						lineWidth = this.lineWidth;
+						arc(this.clickPos.touches[i].x, this.clickPos.touches[i].y, this.nodeSize, 0, Math.PI*2, true);					
+						fill();
+						//	stroke();
+						closePath();
+						globalAlpha=0.3;
+						beginPath();
+						fillStyle = this.rainbow[i];
+						strokeStyle = this.colors.border;
+						lineWidth = this.lineWidth;
+						arc(this.clickPos.touches[i].x, this.clickPos.touches[i].y, this.nodeSize, 0, Math.PI*2, true);					
+						fill();
+						//	stroke();
+						closePath(); 
+						globalAlpha=1;
+					}
+				}
+				clearRect(0,this.GUI.h,this.GUI.w,this.height - this.GUI.h)
+			}
+			else {
+				this.setFont()
+				fillStyle = this.colors.border;
+				fillText(this.text, this.GUI.w/2, this.GUI.h/2);
+				globalAlpha = 1;
+			}
+		}
+	}
+	this.drawLabel();
+}
+
+multitouch.prototype.click = function() {
+	this.draw();
+	this.sendit();
+}
+
+multitouch.prototype.move = function() {
+	if (this.clicked) {
+		this.draw();
+		this.sendit();
+	}
+}
+
+multitouch.prototype.release = function() {
+
+	if(!this.clicked) {
+		this.clickPos.touches = new Array();
+		for (var i=0;i<5;i++) {
+			this.val["touch"+i] = {
+				x: 0,
+				y: 0
+			}
+		}
+		this.transmit(this.val);
+	}
+	
+	this.draw();
+	this.sendit();
+	
+}
+
+multitouch.prototype.sendit = function() {
+	this.val = new Object();
+	for (var i=0;i<this.clickPos.touches.length;i++) {
+		this.val["touch"+i] = {
+			x: this.clickPos.touches[i].x/this.canvas.width,
+			y: math.invert(this.clickPos.touches[i].y/this.canvas.height)
+		}
+	}
+	this.transmit(this.val);
+}
+},{"../core/widget":3,"../utils/drawing":5,"../utils/math":6,"util":51}],30:[function(require,module,exports){
+var math = require('../utils/math')
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class number      
+	Number box
+	```html
+	<canvas nx="number"></canvas>
+	```
+	<canvas nx="number" style="margin-left:25px"></canvas>
+*/
+
+var number = module.exports = function (target) {
+	this.defaultSize = { width: 50, height: 20 };
+	widget.call(this, target);
+	
+	/** @property {object}  val    
+		| &nbsp; | data
+		| --- | ---
+		| *value* | Number value
+		
+		```js
+			// Sets number1.val.value to 20
+			number1.set({
+			&nbsp; value: 20
+			})
+		```
+	*/
+	this.val = {
+		value: 0
+	}
+
+	/** @property {float}  min   The minimum number allowed. Default is -20000.
+
+		```js
+		    // only allow positive numbers
+			number1.min = 0;
+		```
+	*/
+	this.min = -20000
+
+	/** @property {float}  max   The maximum number allowed. Default is 20000.
+
+		```js
+		    // only allow negative numbers
+			number1.max = 0;
+		```
+	*/
+	this.max = 20000
+
+	/** @property {float}  step   The increment. Default is 1.
+
+		```js
+		    // count by 10s
+			number1.step = 10;
+		```
+	*/
+	this.step = 1
+
+
+	/** @property {float}  rate   Sensitivity of dragging. Default is .25
+
+		```js
+		    // For fine tuning 
+			number1.rate = .001;
+		```
+	*/
+	this.rate = .25
+
+	/** @property {integer}  decimalPlaces   How many decimal places on the number. This applies to both the output and the interface text. Default is 2. To achieve an int (non-float), set decimalPlaces to 0.
+
+		```js
+			// For an int counter
+			number1.decimalPlaces = 0;
+		```
+	*/ 
+	this.decimalPlaces = 3;
+	this.lostdata = 0;
+	this.actual = 0;
+
+	// SWAP
+	// 
+	this.canvas.ontouchstart = null;
+	this.canvas.ontouchmove = null;
+	this.canvas.ontouchend = null;
+
+	var htmlstr = '<input type="text" nx="number" id="'+this.canvasID+'" style="height:'+this.GUI.h+'px;width:'+this.GUI.w+'px;font-size:'+this.GUI.h/2+'px;"></input><canvas height="1px" width="1px" style="display:none"></canvas>'                   
+	var canv = this.canvas
+	var cstyle = this.canvas.style
+	var parent = canv.parentNode
+	var newdiv = document.createElement("span")
+	newdiv.innerHTML = htmlstr
+	newdiv.className = "nx"
+	parent.replaceChild(newdiv,canv)
+
+	this.el = document.getElementById(this.canvasID)
+	for (var prop in cstyle) {
+			if (prop != "height" && prop != "width") {
+    		this.el.style[prop] = cstyle[prop]
+ 			}
+  }
+
+  if (this.label) {
+	  var labeldiv = document.createElement("div")
+	  labeldiv.innerHTML = this.label
+	  labeldiv.style.fontSize = this.labelSize/2.8+"px"
+	  labeldiv.style.fontFamily = this.labelFont
+	  labeldiv.style.textAlign = this.labelAlign
+	  labeldiv.style.lineHeight = this.labelSize+"px"
+	  labeldiv.style.width = this.GUI.w+"px"
+	  labeldiv.style.color = nx.colors.black
+	  labeldiv.className = "nxlabel"
+	  newdiv.appendChild(labeldiv)
+  }
+
+	this.canvas = document.getElementById(this.canvasID);
+	this.canvas.style.height = this.GUI.h + "px"
+	this.canvas.style.fontSize = this.GUI.h * .6 + "px"
+	this.canvas.style.textAlign = "left"
+	this.canvas.style.backgroundColor = this.colors.fill
+	this.canvas.style.highlight = this.colors.fill
+	this.canvas.style.border = "none"
+	this.canvas.style.outline = "none"
+	this.canvas.style.padding = "4px 10px"
+	this.canvas.style.cursor = "pointer"
+	this.canvas.style.display = "block"
+	this.canvas.className = ""
+
+	this.canvas.addEventListener("blur", function () {
+	  //this.canvas.style.border = "none";
+
+	  this.canvas.style.backgroundColor = this.colors.fill;
+	  this.canvas.style.color = this.colors.black;
+	  if (this.canvas.value != this.val.value) {
+	  	this.actual = parseFloat(this.canvas.value)
+	  	this.actual = math.clip(this.actual,this.min,this.max)
+		this.actual = math.prune(this.actual,this.decimalPlaces);
+	  	this.set({"value": this.actual}, true)
 	  }
-	
-	  return this;
-	};
-	
-	EventEmitter.prototype.on = EventEmitter.prototype.addListener;
-	
-	EventEmitter.prototype.once = function(type, listener) {
-	  if (!isFunction(listener))
-	    throw TypeError('listener must be a function');
-	
-	  var fired = false;
-	
-	  function g() {
-	    this.removeListener(type, g);
-	
-	    if (!fired) {
-	      fired = true;
-	      listener.apply(this, arguments);
-	    }
+	}.bind(this));
+
+	this.canvas.addEventListener("keydown", function (e) {
+	  if (e.which < 48 || e.which > 57) {
+	  	if (e.which != 189 && e.which != 190 && e.which != 8) {
+	  		e.preventDefault();
+	  	}
 	  }
+	  if (e.which==13) {
+	  /*	this.actual = parseFloat(this.canvas.value)
+	  	this.actual = math.clip(this.actual,this.min,this.max)
+		this.actual = math.prune(this.actual,this.decimalPlaces);
+	  	this.set({"value": this.actual}, true) */
+	  	//this.canvas.style.outline = "none";
+	  	this.canvas.blur()
+	  }
+	}.bind(this));
+
 	
-	  g.listener = listener;
-	  this.on(type, g);
+  // Setup interaction
+  if (nx.isTouchDevice) {
+    this.canvas.ontouchstart = this.preTouch;
+    this.canvas.ontouchmove = this.preTouchMove;
+    this.canvas.ontouchend = this.preTouchRelease;
+  } else {
+    this.canvas.addEventListener('mousedown', this.preClick, false);
+  }
+
+
+  this.canvas.style.userSelect = "none !important";
+  this.canvas.style.mozUserSelect = "none !important";
+  this.canvas.style.webkitUserSelect = "none !important";
+
+
+
+
+
+
+	this.init();
+}
+util.inherits(number, widget);
+
+number.prototype.init = function() {
+
+
+  this.draw();
+}
+
+number.prototype.draw = function() {
+
+	this.canvas.value = this.val.value;
+
+}
+
+
+number.prototype.click = function(e) {
+	this.canvas.readOnly = true
+	this.actual = this.val.value
+}
+
+number.prototype.move = function(e) {
+	if (this.clicked) {
+	  	this.canvas.style.border = "none";
+
+		this.actual -= (this.deltaMove.y*(this.rate*this.step));
+		this.actual = math.clip(this.actual,this.min,this.max)
+		this.val.value = Math.floor(this.actual / this.step) * this.step;
+		this.val.value = math.prune(this.val.value,this.decimalPlaces);
+		this.draw();
+		this.transmit(this.val);
+	}
+}
+
+
+number.prototype.release = function(e) {
+	if (!this.hasMoved && this.canvas.readOnly) {
+		this.canvas.readOnly = false;
+		this.canvas.focus()
+		this.canvas.setSelectionRange(0, this.canvas.value.length)
+		this.canvas.style.backgroundColor = this.colors.accent;
+		this.canvas.style.color = this.colors.fill;
+	}
+}
+
+},{"../core/widget":3,"../utils/math":6,"util":51}],31:[function(require,module,exports){
+var util = require('util');
+var widget = require('../core/widget');
+
+// panel for max duplication -- maybe this object is unnecessary.
+
+var panel = module.exports = function (target) {
+	this.defaultSize = { width: 100, height: 100 };
+	widget.call(this, target);
+}
+util.inherits(panel, widget);
+
+panel.prototype.init = function() {
+	this.draw();
+}
+
+panel.prototype.draw = function() {
+	this.erase();
+	this.makeRoundedBG();
+	with (this.context) {
+		fillStyle = this.colors.border;
+		lineWidth = this.lineWidth;
+		fill();
+	}
+}
+},{"../core/widget":3,"util":51}],32:[function(require,module,exports){
+var math = require('../utils/math')
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class position      
+	Two-dimensional touch slider.
+	```html
+	<canvas nx="position"></canvas>
+	```
+	<canvas nx="position" style="margin-left:25px"></canvas>
+*/
+
+var position = module.exports = function (target) {
+
+	// define a default size
+	this.defaultSize = { width: 150, height: 100 };
+
+	widget.call(this, target);
 	
-	  return this;
-	};
+	/** @property {integer} nodeSize Size of touch node graphic. */
+	this.nodeSize = 15;
+
+	/** @property {object}  val   val is an object containing the main interactive / actionable aspects of the widget.
+		| &nbsp; | data
+		| --- | ---
+		| *x* | x position of slider (float 0-1)
+		| *y* | y position of slider (float 0-1)
+	*/
+	this.val = {
+		x: 0.5,
+		y: 0.5
+	}
 	
-	// emits a 'removeListener' event iff the listener was removed
-	EventEmitter.prototype.removeListener = function(type, listener) {
-	  var list, position, length, i;
+	this.init();
+}
+
+// inherit the widget object template
+util.inherits(position, widget);
+
+// .init() is called automatically when the widget is created on a webpage.
+position.prototype.init = function() {
+	this.nodeSize = Math.min(this.GUI.h,this.GUI.w)/10;
+	this.nodeSize = Math.max(this.nodeSize,10)
+	this.actualWid = this.GUI.w - this.nodeSize*2;
+	this.actualHgt = this.GUI.h - this.nodeSize*2;
+	this.draw();
+}
+
+// .draw() should be used for any graphics activity
+position.prototype.draw = function() {
+	this.erase();
+	with (this.context) {
+
+		// use this.colors.fill for the widget background color (default: very light gray)
+		// use this.colors.border for any extra structural needs (default: light gray)
+		// use this.colors.accent for important or highlighted parts (default: a bright color)
+		fillStyle = this.colors.fill;
+		fillRect(0,0,this.GUI.w,this.GUI.h);
+
+		var drawingX = this.val.x * this.actualWid + this.nodeSize
+		var drawingY = math.invert(this.val.y) * this.actualHgt + this.nodeSize
+
+		//stay within right/left bounds
+		if (drawingX<(this.nodeSize)) {
+			drawingX = this.nodeSize;
+		} else if (drawingX>(this.GUI.w-this.nodeSize)) {
+			drawingX = this.GUI.w - this.nodeSize;
+		}
+		//stay within top/bottom bounds
+		if (drawingY<(this.nodeSize)) {
+			drawingY = this.nodeSize;
+		} else if (drawingY>(this.GUI.h-this.nodeSize)) {
+			drawingY = this.GUI.h - this.nodeSize;
+		}
 	
-	  if (!isFunction(listener))
-	    throw TypeError('listener must be a function');
+		with (this.context) {
+
+			// draw the touch point
+			beginPath();
+			fillStyle = this.colors.accent;
+			arc(drawingX, drawingY, this.nodeSize, 0, Math.PI*2, true);					
+			fill();
+			closePath();
+
+			if (this.clicked) {
+				// draw the emphasis circle
+				beginPath();
+				fillStyle = this.colors.accent;
+				arc(drawingX, drawingY, this.nodeSize*2, 0, Math.PI*2, true);					
+				fill();
+				closePath();clearRect(0,this.GUI.h,this.GUI.w,this.height - this.GUI.h)
+			}
+		}
+	}
 	
-	  if (!this._events || !this._events[type])
-	    return this;
+	this.drawLabel();
+}
+
+// .click() will be fired when the interface is interacted with
+// this.clicked is automatically set to true
+// this.clickPos is already and object with x and y properties detailing click point.
+position.prototype.click = function() {
+	this.val.x = this.clickPos.x;
+	this.val.y = this.clickPos.y;
+	this.scaleNode();
+	this.val["state"] = "click"
+	this.transmit(this.val);
+	this.draw();
+}
+
+// .move() will be fired when the interface is moved over after being clicked
+// this.clickPos is already and object with x and y properties detailing click point.
+position.prototype.move = function() {
+	this.val.x = this.clickPos.x;
+	this.val.y = this.clickPos.y;
+	this.scaleNode();
+	this.val["state"] = "move"
+	this.transmit(this.val);
+	this.draw();
+}
+
+// .release() will be fired on mouse up (unclick)
+position.prototype.release = function() {
+	this.val.x = this.clickPos.x;
+	this.val.y = this.clickPos.y;
+	this.scaleNode();
+	this.val["state"] = "release"
+	this.transmit(this.val);
+	this.draw();
+}
+
+/* TOUCH SPECIFIC EVENTS
+ currently, ontouch, ontouchmove, and ontouchrelease automatically execute .click, .move, and .release
+ so you only need to write one function for these events, and they will be touch compatible by default
+ however if you would like to create a touch-specific event you may define the following functions.
+ in these functions, .clickPos and .clicked will refer to your touch interactions.
+
+position.prototype.touch = function() {
+
+}
+
+position.prototype.touchmove = function() {
 	
-	  list = this._events[type];
-	  length = list.length;
-	  position = -1;
+}
+
+position.prototype.touchrelease = function() {
 	
-	  if (list === listener ||
-	      (isFunction(list.listener) && list.listener === listener)) {
-	    delete this._events[type];
-	    if (this._events.removeListener)
-	      this.emit('removeListener', type, listener);
+}
+
+
+
+
+*/
+
+
+
+/* 
+ extra functions pertaining only to this widget 
+*/
+
+position.prototype.scaleNode = function() {
+	var actualX = this.val.x - this.nodeSize;
+	var actualY = this.val.y - this.nodeSize;
+	var clippedX = math.clip(actualX/this.actualWid, 0, 1);
+	var clippedY = math.clip(actualY/this.actualHgt, 0, 1);
+	this.val.x = math.prune(clippedX, 3)
+	this.val.y = math.prune(clippedY, 3)
+	this.val.y = math.invert(this.val.y);
+}
+
+/** @method animate
+	Adds animation to the widget.
+	@param {string} [type] Type of animation. Currently accepts "none" or "bounce", in which case the touch node can be tossed and bounces.
+*/
+position.prototype.animate = function(aniType) {
 	
-	  } else if (isObject(list)) {
-	    for (i = length; i-- > 0;) {
-	      if (list[i] === listener ||
-	          (list[i].listener && list[i].listener === listener)) {
-	        position = i;
-	        break;
-	      }
-	    }
+	switch (aniType) {
+		case "bounce":
+			nx.aniItems.push(this.aniBounce.bind(this));
+			break;
+		case "none":
+			nx.aniItems.splice(nx.aniItems.indexOf(this.aniBounce));
+			break;
+	}
 	
-	    if (position < 0)
-	      return this;
+}
+
+position.prototype.aniBounce = function() {
+	if (!this.clicked && this.val.x) {
+		this.val.x += (this.deltaMove.x/2)/this.GUI.w;
+		this.val.y -= (this.deltaMove.y/2)/this.GUI.h;
+		this.val["state"] = "animated";
+		if (math.bounce(this.val.x, 0, 1, this.deltaMove.x) != this.deltaMove.x) {
+			this.deltaMove.x = math.bounce(this.val.x, 0, 1, this.deltaMove.x);
+			this.val["state"] = "bounce";
+		}
+		if (this.val.y >= 1 || this.val.y <= 0) {
+			this.deltaMove.y = math.bounce(this.val.y, 0, 1, this.deltaMove.y) * -1;
+			this.val["state"] = "bounce";
+		}
+		this.transmit(this.val);
+		this.draw();
+	}
+}
+
+position.prototype.customDestroy = function() {
+	nx.removeAni(this.aniBounce);
+}
+},{"../core/widget":3,"../utils/math":6,"util":51}],33:[function(require,module,exports){
+var util = require('util');
+var widget = require('../core/widget');
+var math = require('../utils/math')
+
+/** 
+	@class range      
+	Range slider
+	```html
+	<canvas nx="range"></canvas>
+	```
+	<canvas nx="range" style="margin-left:25px"></canvas>
+*/
+
+var range = module.exports = function (target) {
+	this.defaultSize = { width: 110, height: 35 };
+	widget.call(this, target);
+
+	/** @property {object}  val  Object containing core interactive aspects of widget, which are also its data output. Has the following properties: 
+		| &nbsp; | data
+		| --- | ---
+		| *start* | Range start value (float 0-1)
+		| *stop* | Range end value (float 0-1)
+		| *size* | Distance between ends (float 0-1)
+	*/
+	this.val = {
+		start: 0.3,
+		stop: 0.7,
+		size: 0.4
+	}
+
+
+	// handling horiz possibility
+	/** @property {boolean}  hslider  Whether or not the slider is a horizontal slider. Default is false, but set automatically to true if the slider is wider than it is tall. */  
+	this.hslider = false;
+	this.handle;
+	this.relhandle;
+	this.cap;
+	this.firsttouch = "start";
+
+	/** @property {string}  mode  Mode of interaction. "edge" mode lets you drag each edge of the range individually. "area" mode (default) lets you drag the range as a whole (with parallel mouse movement) or scale the range as a whole (with transverse mouse movement) */
+	this.mode = "area" // modes: "edge", "area"
+	this.touchdown = new Object();
+	this.init();
+}
+util.inherits(range, widget);
+
+range.prototype.init = function() {
+
+	//decide if hslider or vslider
+	if (this.GUI.h>=this.GUI.w) {
+		this.hslider = false;
+	} else {
+		this.hslider = true;
+	}
+
+	if (this.canvas.getAttribute("label")!=null) {
+		this.label = this.canvas.getAttribute("label");
+	}
+
+	this.draw();
+}
+
+range.prototype.draw = function() {
+	this.erase();
+		
+	with (this.context) {
+		fillStyle = this.colors.fill;
+		fillRect(0,0,this.GUI.w,this.GUI.h);
 	
-	    if (list.length === 1) {
-	      list.length = 0;
-	      delete this._events[type];
+		if (!this.hslider) {
+
+			var x1 = 0;
+			var y1 = this.GUI.h-this.val.stop*this.GUI.h;
+			var x2 = this.GUI.w;
+			var y2 = this.GUI.h-this.val.start*this.GUI.h;
+
+			fillStyle = this.colors.accent;
+			fillRect(x1,y1,x2-x1,y2-y1);
+
+		} else {
+
+			var x1 = this.val.start*this.GUI.w;
+			var y1 = 0;
+			var x2 = this.val.stop*this.GUI.w;
+			var y2 = this.GUI.h;
+		   
+			fillStyle = this.colors.accent;
+			fillRect(x1,y1,x2-x1,y2-y1);
+		}
+	}
+	this.drawLabel();
+}
+
+range.prototype.click = function() {
+	if (this.mode=="edge") {
+		if (this.hslider) {
+			if (Math.abs(this.clickPos.x-this.val.start*this.GUI.w) < Math.abs(this.clickPos.x-this.val.stop*this.GUI.w)) {
+				this.firsttouch = "start"
+			} else {
+				this.firsttouch = "stop"
+			}
+		} else {
+			if (Math.abs(Math.abs(this.clickPos.y-this.GUI.h)-this.val.start*this.GUI.h) < Math.abs(Math.abs(this.clickPos.y-this.GUI.h)-this.val.stop*this.GUI.h)) {
+				this.firsttouch = "start"
+			} else {
+				this.firsttouch = "stop"
+			}
+		}
+	} else if (this.mode=="area") {
+		this.touchdown = {
+			x: this.clickPos.x,
+			y: this.clickPos.y
+		}
+		this.startval = new Object();
+		this.startval.size = this.val.stop - this.val.start;
+		this.startval.loc = this.val.start + this.startval.size/2;
+	}
+	this.move();
+}
+
+range.prototype.move = function() {
+
+	if (this.mode=="edge") {
+		if (this.hslider) {
+			if (this.firsttouch=="start") {
+				this.val.start = this.clickPos.x/this.GUI.w;
+				if (this.clickPos.touches.length>1) {
+					this.val.stop = this.clickPos.touches[1].x/this.GUI.w;
+				}
+			} else {
+				this.val.stop = this.clickPos.x/this.GUI.w;
+				if (this.clickPos.touches.length>1) {
+					this.val.start = this.clickPos.touches[1].x/this.GUI.w;
+				}
+			}
+		} else {
+			if (this.firsttouch=="start") {
+				this.val.start = math.invert(this.clickPos.y/this.GUI.h);
+				if (this.clickPos.touches.length>1) {
+					this.val.stop = math.invert(this.clickPos.touches[1].y/this.GUI.h);
+				}
+			} else {
+				this.val.stop = math.invert(this.clickPos.y/this.GUI.h);
+				if (this.clickPos.touches.length>1) {
+					this.val.start = math.invert(this.clickPos.touches[1].y/this.GUI.h);
+				}
+			}
+		}
+
+		if (this.val.stop < this.val.start) {
+			this.tempstart = this.val.start;
+			this.val.start = this.val.stop;
+			this.val.stop = this.tempstart;
+			if (this.firsttouch=="start") {
+				this.firsttouch = "stop";
+			} else {
+				this.firsttouch = "start";
+			}
+		} 
+		this.val = {
+			start: math.clip(this.val.start, 0, 1),
+			stop: math.clip(this.val.stop, 0, 1),
+		} 
+		this.val['size'] = math.prune(math.clip(Math.abs(this.val.stop - this.val.start), 0, 1), 3)
+	
+		this.draw();
+
+		this.transmit(this.val);
+
+	} else if (this.mode=="area") {
+
+		if (this.hslider) {
+			var moveloc = this.clickPos.x/this.GUI.w;
+			var movesize = (this.touchdown.y - this.clickPos.y)/this.GUI.h;
+		} else {
+			var moveloc = nx.invert(this.clickPos.y/this.GUI.h);
+			var movesize = (this.touchdown.x - this.clickPos.x)/this.GUI.w;
+		//	moveloc *= -1;
+			movesize *= -1;
+		}
+		movesize /= 3;
+		var size = this.startval.size + movesize;
+		size = math.clip(size,0.001,1);
+
+		this.val = {
+			start: moveloc - size/2,
+			stop: moveloc + size/2
+		}
+
+		this.val.start = math.clip(this.val.start,0,1);
+		this.val.stop = math.clip(this.val.stop,0,1);
+
+		this.draw();
+
+		this.transmit(this.val);
+
+	}
+}
+},{"../core/widget":3,"../utils/math":6,"util":51}],34:[function(require,module,exports){
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class select    
+	HTML-style option selector. Outputs the chosen text string. <br> **Note:** Currently the canvas is actaully replaced by an HTML select object. Any inline style on your canvas may be lost in this transformation. To style the resultant select element, we recommend creating CSS styles for the select object using its ID or the select tag.
+	```html
+	<canvas nx="select" choices="sine,saw,square"></canvas>
+	```
+	<canvas nx="select" choices="sine,saw,square"></canvas>
+*/
+
+var select = module.exports = function (target) {
+	this.defaultSize = { width: 200, height: 30 };
+	widget.call(this, target);
+	
+	/** @property {array} choices Desired choices, as an array of strings. Can be initialized with a "choices" HTML attribute of comma-separated text (see example above). 
+	```js
+	select1.choices = ["PartA", "PartB", "GoNuts"]
+	select1.init()
+	```
+	*/
+	this.choices = [ ];
+
+	/** @property {object}  val   
+		| &nbsp; | data
+		| --- | ---
+		| *value* | Text string of option chosen
+	*/
+	this.val = new Object();
+
+	
+	this.canvas.ontouchstart = null;
+	this.canvas.ontouchmove = null;
+	this.canvas.ontouchend = null;
+	
+	if (this.canvas.getAttribute("choices")) {
+		this.choices = this.canvas.getAttribute("choices");
+		this.choices = this.choices.split(",");
+	}
+	var htmlstr = '<select id="'+this.canvasID+'" class="nx" nx="select" style="height:'+this.GUI.h+'px;width:'+this.GUI.w+'px;" onchange="'+this.canvasID+'.change(this)"></select><canvas height="1px" width="1px" style="display:none"></canvas>'                   
+	var canv = this.canvas
+	var cstyle = this.canvas.style
+	var parent = canv.parentNode;
+	var newdiv = document.createElement("span");
+	newdiv.innerHTML = htmlstr;
+	newdiv.className = "nx"
+	parent.replaceChild(newdiv,canv)
+	this.sel = document.getElementById(this.canvasID)
+	for (var prop in cstyle)
+    	this.sel.style[prop] = cstyle[prop];
+
+	this.canvas = document.getElementById(this.canvasID);
+
+  this.canvas.style.backgroundColor = this.colors.fill;
+  this.canvas.style.border = "solid 2px "+this.colors.border;
+  this.canvas.style.color = this.colors.black;
+  this.canvas.style.fontSize = Math.round(this.GUI.h/2.3) + "px"
+
+  this.canvas.className = ""
+
+}
+util.inherits(select, widget);
+
+select.prototype.init = function() {
+
+  this.canvas.style.backgroundColor = this.colors.fill;
+  this.canvas.style.border = "solid 2px "+this.colors.border;
+  this.canvas.style.color = this.colors.black;
+
+  var optlength = this.canvas.options.length;
+	for (i = 0; i < optlength; i++) {
+	  this.canvas.options[i] = null;
+	}
+	
+	for (var i=0;i<this.choices.length;i++) {
+		var option=document.createElement("option");
+		option.text = this.choices[i];
+		option.value = this.choices[i];
+		this.canvas.add(option,null);
+	}
+
+	this.val.text = this.choices[0]
+
+}
+
+select.prototype.change = function(thisselect) {
+	this.val.text = thisselect.value;
+	this.transmit(this.val);
+}
+
+select.prototype.draw = function() {
+
+		// included so that when .set() calls .draw(), this widget updates its value
+		this.canvas.value = this.val.text
+    this.canvas.style.backgroundColor = this.colors.fill;
+    this.canvas.style.color = this.colors.black;
+    this.canvas.style.border = "solid 2px "+this.colors.border;
+
+}
+},{"../core/widget":3,"util":51}],35:[function(require,module,exports){
+var math = require('../utils/math')
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class slider      
+	Slider (vertical or horizontal)
+	```html
+	<canvas nx="slider"></canvas>
+	```
+	<canvas nx="slider" style="margin-left:25px"></canvas>
+*/
+
+var slider = module.exports = function (target) {
+	this.defaultSize = { width: 35, height: 110 };
+	widget.call(this, target);
+
+  if (this.canvas.getAttribute("min")!=null) {
+    this.min = parseFloat(this.canvas.getAttribute("min"));
+  } else {
+  	this.min = 0
+  }
+  if (this.canvas.getAttribute("max")!=null) {
+    this.max = parseFloat(this.canvas.getAttribute("max"));
+  } else {
+  	this.max = 1
+  }
+  if (this.canvas.getAttribute("step")!=null) {
+    this.step = parseFloat(this.canvas.getAttribute("step"));
+  } else {
+  	this.step = 0.001
+  }
+
+	/** @property {object}  val   
+		| &nbsp; | data
+		| --- | ---
+		| *value* | Slider value (float 0-1)
+	*/
+	this.val.value = nx.scale(0.7,0,1,this.min,this.max)
+	
+
+	/** @property {string}  mode   Set "absolute" or "relative" mode. In absolute mode, slider will jump to click/touch position. In relative mode, it will not.
+	```js
+	nx.onload = function() {
+	&nbsp; // Slider will not jump to touch position.
+	&nbsp; slider1.mode = "relative" 
+	}
+	```
+	*/
+	this.mode = "absolute";
+
+	/** @property {boolean}  hslider   Whether or not the slider should be horizontal. This is set to true automatically if the canvas is wider than it is tall. To override the default decision, set this property to true to create a horizontal slider, or false to create a vertical slider.
+	
+	```js
+	nx.onload = function() {
+	&nbsp; //forces horizontal slider 
+	&nbsp; slider1.hslider = true
+	&nbsp; slider1.draw();
+	&nbsp; //forces vertical slider 
+	&nbsp; slider2.hslider = false
+	&nbsp; slider2.draw();
+	}
+	```
+	*/
+	this.hslider = false;
+	this.handle;
+	this.relhandle;
+	this.cap;
+
+	this.maxdigits = 3
+
+	this.calculateDigits = nx.calculateDigits;
+
+	this.init();
+}
+util.inherits(slider, widget);
+
+slider.prototype.init = function() {
+
+	//decide if hslider or vslider
+	if (this.GUI.h>=this.GUI.w) {
+		this.hslider = false;
+	} else {
+		this.hslider = true;
+	}
+
+
+	this.draw();
+}
+
+
+slider.prototype.draw = function() {
+
+	var normalval = this.normalize(this.val.value)
+
+	//figure out text size
+	this.digits = this.calculateDigits()
+
+	this.erase();
+		
+	with (this.context) {
+		fillStyle = this.colors.fill;
+		fillRect(0,0,this.GUI.w,this.GUI.h);
+	
+		if (!this.hslider) {
+
+			var x1 = 0;
+			var y1 = this.GUI.h-normalval*this.GUI.h;
+			var x2 = this.GUI.w;
+			var y2 = this.GUI.h;
+		
+			fillStyle = this.colors.accent;
+			fillRect(x1,y1,x2-x1,y2-y1);
+			
+			//text
+			var valtextsize = (this.GUI.w / this.digits.total) * 1.2
+			if (valtextsize > 6) {
+
+				// figure out val text location
+		    if (y1 < this.GUI.h - valtextsize/2-5) {
+					fillStyle = this.colors.white
+		    	var texty = this.GUI.h-valtextsize/2-5
+		    } else {
+					fillStyle = this.colors.accent
+		    	var texty = y1 - valtextsize/2-5
+		    }
+		    var textx = this.GUI.w/2
+		    var valtextAlign = "center"
+		    var valtextBaseline = "middle"
+			}
+
+		} else {
+
+			var x1 = 0;
+			var y1 = 0;
+			var x2 = normalval*this.GUI.w;
+			var y2 = this.GUI.h;
+		
+			fillStyle = this.colors.accent
+			fillRect(x1,y1,x2-x1,y2-y1)
+
+			//text
+			var valtextsize = this.GUI.h/2
+			if (valtextsize > 6) {
+
+				// figure out val text location
+		    if (x2 > this.digits.total*valtextsize/2) {
+					fillStyle = this.colors.white
+		    	var textx = 5
+		    } else {
+					fillStyle = this.colors.accent
+		    	var textx = x2 + 5
+		    }
+		    var texty = this.GUI.h/2
+		    var valtextAlign = "left"
+		    var valtextBaseline = "middle"
+			}
+
+		}
+
+
+    var valtext = this.val.value.toFixed(this.digits.decimals)
+    textBaseline = valtextBaseline
+		textAlign = valtextAlign
+    font = valtextsize+"px 'Open Sans'"
+    fillText(valtext,textx,texty);
+
+
+		if (this.label) {
+			this.drawLabel()
+		}
+	}
+}
+
+slider.prototype.click = function() {
+	this.move();
+}
+
+slider.prototype.move = function() {
+
+	var normalval = this.normalize(this.val.value)
+
+	if (this.hslider) {
+		this.handle = this.clickPos.x;
+		this.relhandle = this.deltaMove.x;
+		this.cap = this.GUI.w;
+	} else {
+		this.handle = this.clickPos.y;
+		this.relhandle = this.deltaMove.y*-1;
+		this.cap = this.GUI.h
+	}
+
+	if (this.mode=="absolute") {
+		if (this.clicked) {
+			if (!this.hslider) {
+				normalval = Math.abs((math.clip(this.clickPos.y/this.GUI.h, 0, 1) - 1));
+			} else {	
+				normalval = math.clip(this.clickPos.x/this.GUI.w, 0, 1);
+			}
+			this.draw();
+		}
+	} else if (this.mode=="relative") {
+		if (this.clicked) {
+			if (!this.hslider) {
+				normalval = math.clip(normalval + ((this.deltaMove.y*-1)/this.GUI.h),0,1);
+			} else {
+				normalval = math.clip(normalval + ((this.deltaMove.x)/this.GUI.w),0,1);
+			}
+			this.draw();
+		}
+	}
+
+	this.val.value = math.prune(this.rangify(normalval),3)
+	this.transmit(this.val);
+}
+},{"../core/widget":3,"../utils/math":6,"util":51}],36:[function(require,module,exports){
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class string      
+	Animated model of a plucked string interface.
+	```html
+	<canvas nx="string"></canvas>
+	```
+	<canvas nx="string" style="margin-left:25px"></canvas>
+*/
+
+var string = module.exports = function (target) {
+	this.defaultSize = { width: 150, height: 75 };
+	widget.call(this, target);
+	
+	/** @property {object}  val  Object containing the core interactive aspects of the widget, which are also its data output. Has the following properties: 
+		| &nbsp; | data
+		| --- | ---
+		| *string* | Index of the string that is plucked (starts at 0)
+		| *x* | Where on the string the pluck occured (float 0-1);
+	*/
+	this.val = {
+		string: 0,
+		x: 0
+	}
+	/** @property {integer}  numberOfStrings How many strings in the widget. We recommend setting this property with .setStrings() */
+	this.numberOfStrings = 10;
+	this.strings = new Array();
+	this.abovestring = new Array();
+	/** @property {integer}  friction  How quickly the string slows down */
+	this.friction = 1;
+	
+	var stringdiv;
+
+	this.init();
+
+	nx.aniItems.push(this.draw.bind(this));
+}
+util.inherits(string, widget);
+
+string.prototype.init = function() {
+	stringdiv = this.GUI.h/(this.numberOfStrings + 1);
+	for (var i=0;i<this.numberOfStrings;i++) {
+		this.strings[i] = {
+			x1: this.lineWidth,
+			y1: stringdiv*(1+i),
+			x2: this.GUI.w - this.lineWidth,
+			y2: stringdiv*(i+1),
+			held: false, // whether or not it's gripped
+			vibrating: false, // whether or not its vibrating
+			force: 0, // amount of force of pull on string
+			maxstretch: 0, // vibration cap (in Y domain)
+			stretch: 0, // current point vibrating in y domain
+			direction: 0, // which direction it's vibrating
+			above: false // is mouse above or below string
+		};
+	}
+	this.draw();
+}
+
+string.prototype.pulse = function() {
+	this.draw();
+}
+
+/* @method setStrings Sets how many strings are in the widget.
+	```js
+	string1.setStrings(20);
+	``` 
+	*/
+string.prototype.setStrings = function(val) {
+	this.numberOfStrings = val;
+	this.strings = new Array();
+	this.init();
+}
+
+string.prototype.draw = function() {
+	this.erase();
+	with (this.context) {
+		strokeStyle = this.colors.border;
+		fillStyle = this.colors.fill;
+		lineWidth = this.lineWidth;
+	//	stroke();
+		fillRect(0,0,this.GUI.w,this.GUI.h);
+		strokeStyle = this.colors.accent;
+
+		for (var i = 0;i<this.strings.length;i++) {
+
+			var st = this.strings[i];
+
+			if (st.vibrating) {
+				if (st.maxstretch < 0) {
+					st.vibrating = false;
+					st.held = false;
+				}
+				st.stretch = st.stretch + st.direction;
+				
+				if (Math.abs(st.stretch) > st.maxstretch) {
+					//st.direction *= (-0.99);
+					st.direction *= -1;
+					st.stretch = st.stretch + st.direction;
+					st.maxstretch = st.maxstretch - this.friction;
+
+					st.direction = (st.direction / Math.abs(st.direction)) * (st.maxstretch/1)
+				}
+
+				beginPath();
+				moveTo(st.x1, st.y1);
+				quadraticCurveTo(this.GUI.w/2, st.y1+st.stretch, st.x2, st.y2);
+				stroke();
+				closePath();
+				st.on = true;
+
+
+			} else if (st.held) {
+					//will draw rounded
+					//if mouse is higher than string and gripup
+					//or if mouse is 
+					//	if (this.clickPos.y-st.y1<0 && st.gripup || this.clickPos.y-st.y1>0 && !st.gripup) {
+					beginPath();
+					moveTo(st.x1, st.y1);
+					quadraticCurveTo(this.clickPos.x, this.clickPos.y, st.x2, st.y2);
+					stroke();
+					closePath();
+					st.on = true;	
+					/*	} else {
+					beginPath();
+					moveTo(st.x1, st.y1);
+					lineTo(st.x2, st.y2);
+					stroke();
+					closePath();
+				} */
+			} else {
+				beginPath();
+				moveTo(st.x1, st.y1);
+				lineTo(st.x2, st.y2);
+				stroke();
+				closePath();
+				if (st.on) {
+					st.on = false;
+				}
+			}
+		}
+	}
+	this.drawLabel();
+}
+
+string.prototype.click = function() {
+	for (var i = 0;i<this.numberOfStrings;i++) {
+		this.strings[i].above = (this.clickPos.y<this.strings[i].y1);
+	}
+	this.draw();
+}
+
+string.prototype.move = function() {
+	if (this.clicked) {
+		for (var i = 0;i<this.strings.length;i++) {
+
+			//if crosses string
+			if (this.strings[i].above != (this.clickPos.y<this.strings[i].y1) ) {
+				this.strings[i].held = true;
+				this.strings[i].above ^= true;
+			}
+
+			if (this.strings[i].held && Math.abs(this.clickPos.y - this.strings[i].y1) > this.GUI.h/(this.strings.length*3)) {
+
+				this.pluck(i)
+				
+			}
+		}
+	}
+}
+
+string.prototype.release = function() {
+	for (var i = 0;i<this.strings.length;i++) {
+		if (this.strings[i].held) {
+			this.pluck(i);
+		}
+	}	
+}
+
+string.prototype.pluck = function(which) {
+	var i = which;
+	this.val = {
+		string: i,
+		x: this.clickPos.x/this.GUI.w
+	}
+	this.transmit(this.val);
+	this.strings[i].held = false;
+	this.strings[i].force = this.clickPos.y - this.strings[i].y1;
+	this.strings[i].maxstretch = Math.abs(this.clickPos.y - this.strings[i].y1);
+	this.strings[i].stretch = this.clickPos.y - this.strings[i].y1;
+	this.strings[i].vibrating = true;
+	this.strings[i].direction = (this.clickPos.y - this.strings[i].y1)/Math.abs(this.clickPos.y - this.strings[i].y1) * ((this.clickPos.y - this.strings[i].y1)/-1.2);
+}
+
+string.prototype.customDestroy = function() {
+	nx.removeAni(this.draw.bind(this));
+}
+},{"../core/widget":3,"util":51}],37:[function(require,module,exports){
+var math = require('../utils/math')
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class tabs   
+	
+	```html
+	<canvas nx="tabs"></canvas>
+	```
+	<canvas nx="tabs" style="margin-left:25px"></canvas>
+*/
+
+var tabs = module.exports = function(target) {
+	
+	this.defaultSize = { width: 150, height: 50 };
+	widget.call(this, target);
+	
+	//define unique attributes
+	this.choice = 0;
+	this.val = {
+		index: 0,
+		text: ""
+	}
+	this.tabwid = 0;
+	this.options = ["one", "two", "three"]
+	//init
+	this.init();
+
+}
+
+util.inherits(tabs, widget);
+
+
+tabs.prototype.init = function() {
+	this.draw();
+}
+
+
+tabs.prototype.draw = function() {
+
+	with (this.context) {
+		fillStyle = this.colors.fill;
+		fillRect(0,0,this.GUI.w,this.GUI.h)
+
+		textAlign = "center"
+		textBaseline = "middle"
+		font = "normal "+this.GUI.h/5+"px courier"
+	}
+
+	this.tabwid = this.GUI.w/this.options.length
+
+	for (var i=0;i<this.options.length;i++) {
+		if (i==this.choice) {
+			var tabcol = this.colors.accent;
+			var textcol = this.colors.white;
+		} else {
+			var tabcol = this.colors.fill;
+			var textcol = this.colors.black;
+			globalAlpha = 0.7;
+		}
+		with (this.context) {
+			fillStyle=tabcol;
+			fillRect(this.tabwid*i,0,this.tabwid,this.GUI.h)
+			if (i!=this.options.length-1) {
+				beginPath();
+				moveTo(this.tabwid*(i+1),0)
+				lineTo(this.tabwid*(i+1),this.GUI.h)
+				lineWidth = 1;
+				strokeStyle = this.colors.border
+				stroke()
+				closePath()
+			}
+			fillStyle=textcol;
+			font = this.fontSize+"px "+this.font;
+			fillText(this.options[i],this.tabwid*i+this.tabwid/2,this.GUI.h/2)
+		}
+		
+	}
+}
+
+
+tabs.prototype.click = function() {
+	this.choice = ~~(this.clickPos.x / this.tabwid);
+	this.val = {
+		index: this.choice,
+		text: this.options[this.choice]
+	}
+	this.transmit(this.val)
+	this.draw();
+}
+},{"../core/widget":3,"../utils/math":6,"util":51}],38:[function(require,module,exports){
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class text    
+	Text editor. Outputs the typed text string when Enter is pressed. <br> **Note:** Currently the canvas is actaully replaced by an HTML textarea object. Any inline style on your canvas may be lost in this transformation. To style the resultant textarea element, we recommend creating CSS styles for the textarea element using its ID or the textarea tag.
+	```html
+	<canvas nx="text"></canvas>
+	```
+	<canvas nx="text"></canvas>
+*/
+
+var text = module.exports = function (target) {
+	this.defaultSize = { width: 200, height: 100 };
+	widget.call(this, target);
+
+	/** @property {object}  val   
+		| &nbsp; | data
+		| --- | ---
+		| *text* | Text string
+	*/
+	this.val = {
+		text: ""
+	}
+
+	var htmlstr = '<textarea id="'+this.canvasID+'" style="height:'+this.GUI.h+'px;width:'+this.GUI.w+'px;" onkeydown="'+this.canvasID+'.change(event,this)"></textarea><canvas height="1px" width="1px" style="display:none"></canvas>'                   
+	var canv = this.canvas
+	var cstyle = this.canvas.style
+	var parent = canv.parentNode;
+	var newdiv = document.createElement("span");
+	newdiv.innerHTML = htmlstr;
+	newdiv.className = "nx"
+	parent.replaceChild(newdiv,canv)
+	this.el = document.getElementById(this.canvasID)
+
+	for (var prop in cstyle)
+    	this.el.style[prop] = cstyle[prop];
+
+	this.el.style.display = "block"
+	this.el.style.backgroundColor = this.colors.fill
+	this.el.style.border = "none"
+	this.el.style.color = this.colors.black
+	this.el.style.outline = "none"
+	this.el.style.resize = "none"
+	this.el.style.boxSizing = "border-box"
+	this.el.style.padding = "5px"
+	this.el.style.fontFamily = nx.font
+	this.el.style.fontSize = "16px"
+	this.el.className = ""
+
+
+	this.canvas = document.getElementById(this.canvasID);
+
+
+}
+util.inherits(text, widget);
+
+text.prototype.init = function() {
+	
+	this.canvas.ontouchstart = null;
+	this.canvas.ontouchmove = null;
+	this.canvas.ontouchend = null;
+
+    this.canvas.style.backgroundColor = this.colors.fill;
+    this.canvas.style.color = this.colors.black;
+	
+}
+
+// should have a modified "set" function
+text.prototype.change = function(e,el) {
+	this.val.text = el.value
+	if (e.which=="13") {
+		this.transmit(this.val)
+		this.val.text = ""
+		this.draw()
+		e.preventDefault()
+	}
+}
+
+text.prototype.draw = function() {
+	// needed especially for ghost
+	this.el.value = this.val.text 
+	
+    this.canvas.style.backgroundColor = this.colors.fill;
+    this.canvas.style.color = this.colors.black;
+}
+},{"../core/widget":3,"util":51}],39:[function(require,module,exports){
+var math = require('../utils/math')
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class tilt      
+	Mobile and Mac/Chrome-compatible tilt sensor. May not work on all devices! <br> **Notes:** Clicking on this widget toggles it inactive or active. <br>
+	We recommend not calling .init() on this object after the original initialization, because it will add additional redundant tilt listeners to your document.
+	```html
+	<canvas nx="tilt"></canvas>
+	```
+	<canvas nx="tilt" style="margin-left:25px"></canvas>
+*/
+
+var tilt = module.exports = function (target) {
+	this.defaultSize = { width: 50, height: 50 };
+	widget.call(this, target);
+	
+	this.tiltLR;
+	this.tiltFB;
+	this.z;
+	/** @property {boolean} active Whether or not the tilt widget is on (animating and transmitting data). */
+	this.active = true;
+
+	/** @property {object}  val  Object containing the core interactive aspects of the widget, which are also its data output. Has the following properties: 
+		| &nbsp; | data
+		| --- | ---
+		| *x* | X-axis rotation if supported (-1 to 1)
+		| *y* | Y-axis rotation if supported (-1 to 1)
+		| *z* | Z-axis rotation if supported (-1 to 1 or possibly 0 to 360 depending on device)
+	*/
+	this.val = {
+		x: 0,
+		y: 0,
+		z: 0
+	}
+
+	/** @property {string}  text   Text shown on tilt object
+	*/
+	
+	this.text = "TILT";
+	this.init();
+
+	this.boundChromeTilt = this.chromeTilt.bind(this)
+	this.boundMozTilt = this.mozTilt.bind(this)
+
+	if (window.DeviceOrientationEvent) {
+		window.addEventListener('deviceorientation', this.boundChromeTilt, false);
+	} else if (window.OrientationEvent) {
+	  	window.addEventListener('MozOrientation', this.boundMozTilt, false);
+	} else {
+	  	console.log("Not supported on your device or browser.")
+	}
+	
+}
+util.inherits(tilt, widget);
+
+tilt.prototype.deviceOrientationHandler = function() {
+	
+	this.val = {
+		x: math.prune(this.tiltLR/90,3),
+		y: math.prune(this.tiltFB/90,3),
+		z: math.prune(this.z,3)
+	}
+
+	if (this.active) {
+		this.transmit(this.val);
+	}
+	
+}
+
+tilt.prototype.chromeTilt = function(eventData) {
+    this.tiltLR = eventData.gamma;
+		this.tiltFB = eventData.beta;
+		this.z = eventData.alpha
+    this.deviceOrientationHandler();
+    this.draw();
+}
+
+tilt.prototype.mozTilt = function(eventData) {
+    this.tiltLR = eventData.x * 90;
+    // y is the front-to-back tilt from -1 to +1, so we need to convert to degrees
+    // We also need to invert the value so tilting the device towards us (forward) 
+    // results in a positive value. 
+    this.tiltFB = eventData.y * -90;
+    this.z = eventData.z;
+    this.deviceOrientationHandler();
+    this.draw();
+}
+
+tilt.prototype.init = function() {
+	this.draw();
+}
+
+tilt.prototype.draw = function() {
+	
+	this.erase();
+
+	with (this.context) {
+		fillStyle = this.colors.fill;
+	    fillRect(0,0,this.GUI.w,this.GUI.h);
+
+		save(); 
+		translate(this.GUI.w/2,this.GUI.h/2)
+		rotate(-this.val.x*Math.PI/2);
+		translate(-this.GUI.w/2,-this.GUI.h/2)
+	    globalAlpha = 0.4;
+
+	    if (this.active) {
+	    	fillStyle = this.colors.accent;
 	    } else {
-	      list.splice(position, 1);
+	    	fillStyle = this.colors.border;
 	    }
-	
-	    if (this._events.removeListener)
-	      this.emit('removeListener', type, listener);
-	  }
-	
-	  return this;
-	};
-	
-	EventEmitter.prototype.removeAllListeners = function(type) {
-	  var key, listeners;
-	
-	  if (!this._events)
-	    return this;
-	
-	  // not listening for removeListener, no need to emit
-	  if (!this._events.removeListener) {
-	    if (arguments.length === 0)
-	      this._events = {};
-	    else if (this._events[type])
-	      delete this._events[type];
-	    return this;
-	  }
-	
-	  // emit removeListener for all listeners on all events
-	  if (arguments.length === 0) {
-	    for (key in this._events) {
-	      if (key === 'removeListener') continue;
-	      this.removeAllListeners(key);
-	    }
-	    this.removeAllListeners('removeListener');
-	    this._events = {};
-	    return this;
-	  }
-	
-	  listeners = this._events[type];
-	
-	  if (isFunction(listeners)) {
-	    this.removeListener(type, listeners);
-	  } else if (listeners) {
-	    // LIFO order
-	    while (listeners.length)
-	      this.removeListener(type, listeners[listeners.length - 1]);
-	  }
-	  delete this._events[type];
-	
-	  return this;
-	};
-	
-	EventEmitter.prototype.listeners = function(type) {
-	  var ret;
-	  if (!this._events || !this._events[type])
-	    ret = [];
-	  else if (isFunction(this._events[type]))
-	    ret = [this._events[type]];
-	  else
-	    ret = this._events[type].slice();
-	  return ret;
-	};
-	
-	EventEmitter.prototype.listenerCount = function(type) {
-	  if (this._events) {
-	    var evlistener = this._events[type];
-	
-	    if (isFunction(evlistener))
-	      return 1;
-	    else if (evlistener)
-	      return evlistener.length;
-	  }
-	  return 0;
-	};
-	
-	EventEmitter.listenerCount = function(emitter, type) {
-	  return emitter.listenerCount(type);
-	};
-	
-	function isFunction(arg) {
-	  return typeof arg === 'function';
-	}
-	
-	function isNumber(arg) {
-	  return typeof arg === 'number';
-	}
-	
-	function isObject(arg) {
-	  return typeof arg === 'object' && arg !== null;
-	}
-	
-	function isUndefined(arg) {
-	  return arg === void 0;
-	}
 
+		fillRect(-this.GUI.w,this.GUI.h*(this.val.y/2)+this.GUI.h/2,this.GUI.w*3,this.GUI.h*2)
+		font = "bold "+this.GUI.h/5+"px "+this.font;
+		textAlign = "center";
+		textBaseline = "middle";
+		fillText(this.text, this.GUI.w/2, this.GUI.h*(this.val.y/2)+this.GUI.h/2-this.GUI.h/15);
+		globalAlpha = 1;
+		restore();
 
-/***/ }),
-/* 11 */
-/***/ (function(module, exports, __webpack_require__) {
+		clearRect(0,this.GUI.h,this.GUI.w,this.height - this.GUI.h)
+	}
+	this.drawLabel();
+}
 
-	"use strict";
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var math = __webpack_require__(5);
-	
-	/**
-	  Creates a steppable value with minimum, maximum, and step size. This is used in many interfaces to constrict their values to certain ranges.
-	  @param {number} [min=0] minimum
-	  @param {number} [max=1] maximum
-	  @param {number} [step=0]
-	  @param {number} [value=0] initial value
-	  @returns {Object} Step
+tilt.prototype.click = function() {
+	this.active = !this.active;
+}
+
+tilt.prototype.customDestroy = function() {
+	this.active = false;
+	window.removeEventListener("deviceorientation",this.boundChromeTilt,false);
+	window.removeEventListener("mozOrientation",this.boundMozTilt,false);
+}
+},{"../core/widget":3,"../utils/math":6,"util":51}],40:[function(require,module,exports){
+var drawing = require('../utils/drawing');
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class toggle      
+	On/off toggle
+	```html
+	<canvas nx="toggle"></canvas>
+	```
+	<canvas nx="toggle" style="margin-left:25px"></canvas>
+*/
+
+var toggle = module.exports = function (target) {
+	this.defaultSize = { width: 50, height: 50 };
+	widget.call(this, target);
+
+	/** @property {object}  val  Object containing the core interactive aspects of the widget, which are also its data output. Has the following properties: 
+		| &nbsp; | data
+		| --- | ---
+		| *value*| 1 if on, 0 if off
 	*/
-	
-	var Step = (function () {
-	  function Step() {
-	    var min = arguments[0] === undefined ? 0 : arguments[0];
-	    var max = arguments[1] === undefined ? 1 : arguments[1];
-	    var step = arguments[2] === undefined ? 0 : arguments[2];
-	    var value = arguments[3] === undefined ? 0 : arguments[3];
-	
-	    _classCallCheck(this, Step);
-	
-	    //Object.assign(this,{min,max,step});
-	    //Cannot use Object.assign because not supported in Safari.
-	    //I would expect for Babel to take care of this but it is not.
-	    this.min = min;
-	    this.max = max;
-	    this.step = step;
-	    this.value = value;
-	    this.changed = false;
-	    this.oldValue = false;
-	    this.update(this.value);
-	  }
-	
-	  _createClass(Step, {
-	    update: {
-	
-	      /**
-	        Update with a new value. The value will be auto-adjusted to fit the min/max/step.
-	        @param {number} value
-	      */
-	
-	      value: function update(value) {
-	        if (this.step) {
-	          // this.value = math.clip(Math.round(value / (this.step)) * this.step, this.min,this.max);
-	          this.value = math.clip(Math.round((value - this.min) / this.step) * this.step + this.min, this.min, this.max);
-	        } else {
-	          this.value = math.clip(value, this.min, this.max);
-	        }
-	        if (this.oldValue !== this.value) {
-	          this.oldValue = this.value;
-	          this.changed = true;
-	        } else {
-	          this.changed = false;
-	        }
-	        return this.value;
-	      }
-	    },
-	    updateNormal: {
-	
-	      /**
-	        Update with a normalized value 0-1.
-	        @param {number} value
-	      */
-	
-	      value: function updateNormal(value) {
-	        this.value = math.scale(value, 0, 1, this.min, this.max);
-	        return this.update(this.value);
-	      }
-	    },
-	    normalized: {
-	
-	      /**
-	        Get a normalized version of this.value . Not settable.
-	      */
-	
-	      get: function () {
-	        return math.normalize(this.value, this.min, this.max);
-	      }
-	    }
-	  });
-	
-	  return Step;
-	})();
-	
-	module.exports = Step;
+	this.val = {
+		value: 0
+	}
+	this.init();
+}
+util.inherits(toggle, widget);
 
-/***/ }),
-/* 12 */
-/***/ (function(module, exports, __webpack_require__) {
+toggle.prototype.init = function() {
+	this.draw();
+}
 
-	"use strict";
+toggle.prototype.draw = function() {
 	
-	var _interopRequire = function (obj) { return obj && obj.__esModule ? obj["default"] : obj; };
+	this.erase()
+
+	with (this.context) {
+		if (this.val.value) {
+			fillStyle = this.colors.accent;
+		//	strokeStyle = this.colors.white;
+		//	strokeAlpha = 0.3
+			strokeStyle = this.colors.accenthl;
+			strokeAlpha = 1
+		} else {
+			fillStyle = this.colors.fill;
+			strokeStyle = this.colors.border;
+			strokeAlpha = 1
+		}
+		lineWidth = Math.sqrt(this.GUI.w)/2;
+		//lineWidth = this.GUI.w / 20;
+
+		fillRect(0,0,this.GUI.w,this.GUI.h);
+		globalAlpha = strokeAlpha
+		strokeRect(lineWidth/2,lineWidth/2,this.GUI.w-lineWidth,this.GUI.h-lineWidth);
+		globalAlpha = 1
+	}
+
+	this.drawLabel();
 	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
+}
+
+toggle.prototype.click = function() {
+	if (!this.val.value) {
+		this.val.value = 1;
+	} else {
+		this.val.value = 0;
+	}
+	this.draw();
+	this.transmit(this.val);
+}
+},{"../core/widget":3,"../utils/drawing":5,"util":51}],41:[function(require,module,exports){
+var math = require('../utils/math')
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class trace      
+	Path/gesture drawing canvas
+	```html
+	<canvas nx="trace"></canvas>
+	```
+	<canvas nx="trace" style="margin-left:25px"></canvas>
+*/
+
+var trace = module.exports = function (target) {
+
+	// define a default size
+	this.defaultSize = { width: 200, height: 200 };
+
+	widget.call(this, target);
 	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	Object.defineProperty(exports, "__esModule", {
-	  value: true
-	});
-	"use strict";
-	
-	var math = _interopRequire(__webpack_require__(5));
-	
-	var ToggleModel = _interopRequire(__webpack_require__(13));
-	
-	/*
-	how to use :
-	
-	dial.interaction = new Handle('radial','relative',this.width,this.height);
-	// dial.interaction.mode = 'relative'
-	// dial.interaction.direction = 'radial'
-	
-	on click:
-	dial.interaction.anchor = this.mouse;
-	
-	on move:
-	dial.interaction.update(this.mouse);
-	
-	console.log( dial.interaction.value ); should be a normalized value.
-	
+	/** @property {integer} nodeSize Size of path node graphic. */
+	this.nodeSize = 8;
+
+	/** @property {object}  val   val is an object containing the main interactive / actionable aspects of the widget.
+		| &nbsp; | data
+		| --- | ---
+		| *path* | array of objects containing x/y of each path node
 	*/
+	this.val = {
+		path: []
+	}
+
+	this.limit = 20;
+	this.space = 0;
 	
-	/*
-	  absolute/relative are property: mode
-	  radial/vertical/horizontal/2d are property: direction
+	this.init();
+}
+
+// inherit the widget object template
+util.inherits(trace, widget);
+
+// .init() is called automatically when the widget is created on a webpage.
+trace.prototype.init = function() {
+	this.nodeSize = Math.min(this.GUI.h,this.GUI.w)/10;
+	this.nodeSize = Math.max(this.nodeSize,10)
+	this.draw();
+}
+
+// .draw() should be used for any graphics activity
+trace.prototype.draw = function() {
+	this.erase();
+	with (this.context) {
+
+		fillStyle = this.colors.fill;
+		fillRect(0,0,this.GUI.w,this.GUI.h);
+		fillStyle = this.colors.fill;
+
+		globalAlpha = 0.7;
+		for (var i=0;i<this.val.path.length;i++) {
+			var drawingX = this.val.path[i].x * this.GUI.w
+			var drawingY = this.val.path[i].y * this.GUI.h
+
+			beginPath();
+				fillStyle = this.colors.accent;
+				arc(drawingX, drawingY, this.nodeSize, 0, Math.PI*2, true);					
+				fill();
+			closePath();
+
+		}
+		globalAlpha = 1;
+
+	}
 	
-	  plan :
+	this.drawLabel();
+}
+
+trace.prototype.click = function() {
+	this.val.path = []
+	this.space = 0;
+	this.move()
+	this.draw()
+}
+
+trace.prototype.move = function() {
+	this.space++
+	if (this.space>2 && this.val.path.length<this.limit) {
+		this.space = 0
+		var x = math.clip(this.clickPos.x,0,this.GUI.w) / this.GUI.w
+		var y = math.clip(this.clickPos.y,0,this.GUI.h) / this.GUI.h
+		this.val.path.push({ x: x, y: y })
+		/*if (this.val.path.length>=this.limit) {
+			this.val.path = this.val.path.slice(1)
+		} */
+	}
+	this.draw();
+}
+
+trace.prototype.release = function() {
+	this.transmit(this.val);
+}
+
+},{"../core/widget":3,"../utils/math":6,"util":51}],42:[function(require,module,exports){
+var drawing = require('../utils/drawing');
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class typewriter      
+	Computer keyboard listener and visualization. (Desktop only) <br> **Note:** Clicking on the widget toggles it inactive or active, which can be useful if you need to temporarily type without triggering the widget's events.
+	```html
+	<canvas nx="typewriter"></canvas>
+	```
+	<canvas nx="typewriter" style="margin-left:25px"></canvas>
+*/
+
+var typewriter = module.exports = function(target) {
+	this.defaultSize = { width: 300, height: 100 };
+	widget.call(this, target);
+
 	
-	  if relative --
-	  NO on click, get value offset between current value and click value.
-	  NO on move, use click value - offset
-	  INSTEAD
-	  use delta -- bc vertical motion on dial is impossible otherwise
-	  also allow to set sensitivity
-	
+	this.letter = ""
+	this.keywid = this.GUI.w/14.5;
+	this.keyhgt = this.GUI.h/5
+
+	/** @property {boolean}  active  Whether or not the widget is on (listening for events and transmitting values).*/ 
+	this.active = true;
+
+	/** @property {object}  val  Object containing the core interactive aspects of the widget, which are also its data output. Has the following properties: 
+		| &nbsp; | data
+		| --- | ---
+		| *key* | symbol of key pressed (example: "a")
+		| *ascii* | ascii value of key pressed (example: 48)
+		| *on* | 0 if key is being pressed, 1 if key is being released
 	*/
-	
-	var Handle = exports.Handle = (function () {
-	  function Handle() {
-	    var mode = arguments[0] === undefined ? "absolute" : arguments[0];
-	    var direction = arguments[1] === undefined ? "vertical" : arguments[1];
-	    var xbound = arguments[2] === undefined ? [0, 100] : arguments[2];
-	    var ybound = arguments[3] === undefined ? [0, 100] : arguments[3];
-	
-	    _classCallCheck(this, Handle);
-	
-	    this.mode = mode;
-	    this.direction = direction;
-	    this.previous = 0;
-	    this.value = 0;
-	    this.sensitivity = 1;
-	    this.resize(xbound, ybound);
-	  }
-	
-	  _createClass(Handle, {
-	    resize: {
-	      value: function resize(xbound, ybound) {
-	        this.boundary = {
-	          min: {
-	            x: xbound[0],
-	            y: ybound[0]
-	          },
-	          max: {
-	            x: xbound[1],
-	            y: ybound[1]
-	          },
-	          center: {
-	            x: (xbound[1] - xbound[0]) / 2 + xbound[0],
-	            y: (ybound[1] - ybound[0]) / 2 + ybound[0]
-	          }
-	        };
-	      }
-	    },
-	    anchor: {
-	      set: function (mouse) {
-	        this._anchor = this.convertPositionToValue(mouse);
-	      },
-	      get: function () {
-	        return this._anchor;
-	      }
-	    },
-	    update: {
-	      value: function update(mouse) {
-	        if (this.mode === "relative") {
-	          var increment = this.convertPositionToValue(mouse) - this.anchor;
-	          if (Math.abs(increment) > 0.5) {
-	            increment = 0;
-	          }
-	          this.anchor = mouse;
-	          this.value = this.value + increment * this.sensitivity;
-	        } else {
-	          this.value = this.convertPositionToValue(mouse);
-	        }
-	        this.value = math.clip(this.value, 0, 1);
-	      }
-	    },
-	    convertPositionToValue: {
-	      value: function convertPositionToValue(current) {
-	        switch (this.direction) {
-	          case "radial":
-	            var position = math.toPolar(current.x - this.boundary.center.x, current.y - this.boundary.center.y);
-	            position = position.angle / (Math.PI * 2);
-	            position = (position - 0.25 + 1) % 1;
-	            return position;
-	          case "vertical":
-	            return math.scale(current.y, this.boundary.min.y, this.boundary.max.y, 0, 1);
-	          case "horizontal":
-	            return math.scale(current.x, this.boundary.min.x, this.boundary.max.x, 0, 1);
-	        }
-	      }
-	    }
-	  });
-	
-	  return Handle;
-	})();
-	
-	var Button = exports.Button = (function () {
-	  function Button() {
-	    var mode = arguments[0] === undefined ? "button" : arguments[0];
-	
-	    _classCallCheck(this, Button);
-	
-	    this.mode = mode;
-	    this.state = new ToggleModel();
-	    this.paintbrush = false;
-	  }
-	
-	  _createClass(Button, {
-	    click: {
-	      value: function click() {
-	        switch (this.mode) {
-	          case "impulse":
-	            this.state.on();
-	            if (this.timeout) {
-	              clearTimeout(this.timeout);
-	            }
-	            this.timeout = setTimeout(this.state.off.bind(this), 30);
-	            this.emit("change", this.state);
-	            break;
-	          case "button":
-	            this.turnOn();
-	            this.emit("change", this.state);
-	            break;
-	          case "aftertouch":
-	            this.position = {
-	              x: math.clip(this.mouse.x / this.width, 0, 1),
-	              y: math.clip(1 - this.mouse.y / this.height, 0, 1)
-	            };
-	            this.turnOn();
-	            this.emit("change", {
-	              state: this.state,
-	              x: this.position.x,
-	              y: this.position.y });
-	            break;
-	          case "toggle":
-	            this.flip();
-	            this.emit("change", this.state);
-	            break;
-	        }
-	      }
-	    },
-	    move: {
-	      value: function move() {
-	        if (this.mode === "aftertouch") {
-	          this.position = {
-	            x: math.clip(this.mouse.x / this.width, 0, 1),
-	            y: math.clip(1 - this.mouse.y / this.height, 0, 1)
-	          };
-	          this.emit("change", {
-	            state: this.state,
-	            x: this.position.x,
-	            y: this.position.y });
-	          this.render();
-	        }
-	      }
-	    },
-	    release: {
-	      value: function release() {
-	        switch (this.mode) {
-	          case "button":
-	            this.turnOff();
-	            this.emit("change", this.state);
-	            break;
-	          case "aftertouch":
-	            this.turnOff();
-	            this.position = {
-	              x: this.mouse.x / this.width,
-	              y: 1 - this.mouse.y / this.height
-	            };
-	            this.emit("change", {
-	              state: this.state,
-	              x: this.position.x,
-	              y: this.position.y });
-	            break;
-	        }
-	      }
-	    }
-	  });
-	
-	  return Button;
-	})();
+	this.val = {
+		key: "",
+		ascii: 0,
+		on: 0
+	}
 
-/***/ }),
-/* 13 */
-/***/ (function(module, exports) {
+	this.rows = [
+		[
+			{ symbol: "`", value: 192, width: 1, on: false },
+			{ symbol: "1", value: 49, width: 1, on: false  },
+			{ symbol: "2", value: 50, width: 1, on: false  },
+			{ symbol: "3", value: 51, width: 1, on: false  },
+			{ symbol: "4", value: 52, width: 1, on: false  },
+			{ symbol: "5", value: 53, width: 1, on: false  },
+			{ symbol: "6", value: 54, width: 1, on: false  },
+			{ symbol: "7", value: 55, width: 1, on: false  },
+			{ symbol: "8", value: 56, width: 1, on: false  },
+			{ symbol: "9", value: 57, width: 1, on: false  },
+			{ symbol: "0", value: 48, width: 1, on: false  },
+			{ symbol: "-", value: 189, width: 1, on: false  },
+			{ symbol: "=", value: 187, width: 1, on: false  },
+			{ symbol: "delete", value: 46, width: 1.5, on: false  }
+		],
+		[
+			{ symbol: "tab", value: 9, width: 1.5, on: false  },
+			{ symbol: "q", value: 81, width: 1, on: false  },
+			{ symbol: "w", value: 87, width: 1, on: false  },
+			{ symbol: "e", value: 69, width: 1, on: false  },
+			{ symbol: "r", value: 82, width: 1, on: false  },
+			{ symbol: "t", value: 84, width: 1, on: false  },
+			{ symbol: "y", value: 89, width: 1, on: false  },
+			{ symbol: "u", value: 85, width: 1, on: false  },
+			{ symbol: "i", value: 73, width: 1, on: false  },
+			{ symbol: "o", value: 79, width: 1, on: false  },
+			{ symbol: "p", value: 80, width: 1, on: false  },
+			{ symbol: "[", value: 219, width: 1, on: false  },
+			{ symbol: "]", value: 221, width: 1, on: false  },
+			{ symbol: "\\", value: 220, width: 1, on: false  }
+		],
+		[
+			{ symbol: "caps", value: 20, width: 1.75, on: false  },
+			{ symbol: "a", value: 65, width: 1, on: false  },
+			{ symbol: "s", value: 83, width: 1, on: false  },
+			{ symbol: "d", value: 68, width: 1, on: false  },
+			{ symbol: "f", value: 70, width: 1, on: false  },
+			{ symbol: "g", value: 71, width: 1, on: false  },
+			{ symbol: "h", value: 72, width: 1, on: false  },
+			{ symbol: "j", value: 74, width: 1, on: false  },
+			{ symbol: "k", value: 75, width: 1, on: false  },
+			{ symbol: "l", value: 76, width: 1, on: false  },
+			{ symbol: ";", value: 186, width: 1, on: false  },
+			{ symbol: "'", value: 222, width: 1, on: false  },
+			{ symbol: "enter", value: 13, width: 1.75, on: false }
+		],
+		[
+			{ symbol: "shift", value: 16, width: 2.25, on: false  },
+			{ symbol: "z", value: 90, width: 1, on: false  },
+			{ symbol: "x", value: 88, width: 1, on: false  },
+			{ symbol: "c", value: 67, width: 1, on: false  },
+			{ symbol: "v", value: 86, width: 1, on: false  },
+			{ symbol: "b", value: 66, width: 1, on: false  },
+			{ symbol: "n", value: 78, width: 1, on: false  },
+			{ symbol: "m", value: 77, width: 1, on: false  },
+			{ symbol: ",", value: 188, width: 1, on: false  },
+			{ symbol: ".", value: 190, width: 1, on: false  },
+			{ symbol: "/", value: 191, width: 1, on: false  },
+			{ symbol: "shift", value: 16, width: 2.25, on: false }
+		],
+		[
+			{ symbol: "fn", value: 10, width: 1, on: false  },
+			{ symbol: "ctrl", value: 17, width: 1, on: false  },
+			{ symbol: "opt", value: 10, width: 1, on: false  },
+			{ symbol: "cmd", value: 10, width: 1.25, on: false  },
+			{ symbol: "space", value: 32, width: 5, on: false  },
+			{ symbol: "cmd", value: 10, width: 1, on: false  },
+			{ symbol: "opt", value: 10, width: 1, on: false  },
+			{ symbol: "left", value: 37, width: .81, on: false  },
+			{ symbol: "up", value: 38, width: .81, on: false  },
+			{ symbol: "down", value: 40, width: .81, on: false  },
+			{ symbol: "right", value: 39, width: .81, on: false  }
+		]
+	]
 
-	"use strict";
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var Toggle = (function () {
-	  function Toggle(state) {
-	    _classCallCheck(this, Toggle);
-	
-	    this.state = state || false;
-	  }
-	
-	  _createClass(Toggle, {
-	    flip: {
-	      value: function flip(state) {
-	        if (state || state === false) {
-	          this.state = state;
-	        } else {
-	          this.state = !this.state;
-	        }
-	      }
-	    },
-	    on: {
-	      value: function on() {
-	        this.state = true;
-	      }
-	    },
-	    off: {
-	      value: function off() {
-	        this.state = false;
-	      }
-	    }
-	  });
-	
-	  return Toggle;
-	})();
-	
-	module.exports = Toggle;
+	this.boundType = this.typekey.bind(this);
+	this.boundUntype = this.untype.bind(this);
+	window.addEventListener("keydown", this.boundType);
+	window.addEventListener("keyup", this.boundUntype);
 
-/***/ }),
-/* 14 */
-/***/ (function(module, exports, __webpack_require__) {
+	this.init();
+}
+util.inherits(typewriter, widget);
+	
+typewriter.prototype.init = function() {
 
-	"use strict";
+	this.keywid = this.GUI.w/14.5;
+	this.keyhgt = this.GUI.h/5
 	
-	var _interopRequireWildcard = function (obj) { return obj && obj.__esModule ? obj : { "default": obj }; };
+	this.draw();
+}
+
+typewriter.prototype.draw = function() {	// erase
+	this.erase();
+
+	if (!this.active) {
+		this.context.globalAlpha = 0.4
+	} else {
+		this.context.globalAlpha = 1
+	}
+
+	with (this.context) {
+
+		strokeStyle = this.colors.borderhl
+		fillStyle = this.colors.accent 
+		lineWidth = 1
+
+		for (var i=0;i<this.rows.length;i++) {
+			var currkeyL = 0;
+			for (var j=0;j<this.rows[i].length;j++) {
+
+				if (this.val.key==this.rows[i][j].symbol) {
+					if (this.val.on) {
+						this.rows[i][j].on = true;
+					} else {
+						this.rows[i][j].on = false;
+					}
+				}
+
+				drawing.makeRoundRect(this.context, currkeyL , i*this.keyhgt,this.keywid*this.rows[i][j].width,this.keyhgt,4);
+					
+				if (this.rows[i][j].on) {
+					fillStyle = this.colors.accent 
+					strokeStyle = this.colors.accent 
+					fill()
+					stroke()
+				} else {
+					fillStyle = this.colors.fill 
+					strokeStyle = this.colors.borderhl
+
+					fill()
+					stroke()
+				}
 	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
+				currkeyL += this.keywid*this.rows[i][j].width;
+
+			}
+		}
+
+		if (this.val.on) {
+			this.setFont();
+			fillStyle = this.colors.borderhl;
+			font = this.GUI.h+"px "+this.font;
+			fillText(this.val.key, this.GUI.w/2, this.GUI.h/2);
+			
+			globalAlpha = 1
+		}
+
+		if (!this.active) {
+			globalAlpha = 0.7
+			fillStyle = this.colors.borderhl;
+			font = (this.GUI.h/2)+"px courier";
+			textAlign = "center";
+			textBaseline = "middle"
+			fillText("inactive", this.GUI.w/2, this.GUI.h/2);
+		}
+	}
+
+	this.drawLabel();
+}
+
+typewriter.prototype.click = function(e) {
+	this.active = !this.active;
+	this.draw();
+}
+
+typewriter.prototype.typekey = function(e) {
+	if (this.active) {
+		var currKey = e.which;
+		for (var i=0;i<this.rows.length;i++) {
+			for (var j=0;j<this.rows[i].length;j++) {
+				if (currKey == this.rows[i][j].value) {
+					this.val.key = this.rows[i][j].symbol;
+					this.val.on = 1;
+					this.val.ascii = e.which;
+					this.transmit(this.val);
+					break;
+				}
+			}
+		}
+		this.draw();
+	}	
+}
+
+typewriter.prototype.untype = function(e) {
+	if (this.active) {
+		var currKey = e.which;
+		for (var i=0;i<this.rows.length;i++) {
+			for (var j=0;j<this.rows[i].length;j++) {
+				if (currKey == this.rows[i][j].value) {
+				//	this.rows[i][j].on = false;
+					this.val.key = this.rows[i][j].symbol;
+					this.val.on = 0;
+					this.val.ascii = e.which;
+					this.transmit(this.val);
+					break;
+				}
+			}
+		}
+		this.draw();
+	}
+}
+
+typewriter.prototype.customDestroy = function() {
+	window.removeEventListener("keydown", this.boundType);
+	window.removeEventListener("keyup", this.boundUntype);
+}
+},{"../core/widget":3,"../utils/drawing":5,"util":51}],43:[function(require,module,exports){
+var math = require('../utils/math')
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class vinyl      
+	For the boom bap
+	```html
+	<canvas nx="vinyl"></canvas>
+	```
+<!--	<canvas nx="vinyl" style="margin-left:25px"></canvas> -->
+*/
+
+var vinyl = module.exports = function (target) {
+	this.defaultSize = { width: 100, height: 100 };
+	widget.call(this, target);
 	
-	var _get = function get(object, property, receiver) { var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { return get(parent, property, receiver); } } else if ("value" in desc && desc.writable) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } };
+	this.circleSize;
+
+	/** @property speed The rotation increment. Default is 0.05. Not to be confused with .val.speed (see below) which is the data output. During rotation, .speed will always move towards .defaultSpeed */
+	this.speed = 0.05;
+	/** @property defaultSpeed The "steady-state" rotation increment. Default is 0.05. During rotation, if .speed is changed, it will gradually move towards this. */
+	this.defaultspeed = 0.05
+	this.rotation = 0;
+	this.hasMovedOnce = false;
+
+	this.lockResize = true;
 	
-	var _inherits = function (subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) subClass.__proto__ = superClass; };
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var svg = __webpack_require__(4);
-	var Interface = __webpack_require__(6);
-	var Step = __webpack_require__(11);
-	
-	var Interaction = _interopRequireWildcard(__webpack_require__(12));
-	
-	/**
-	* Slider
-	*
-	* @description Horizontal or vertical slider with settable interaction modes.
-	*
-	* @demo <span nexus-ui="slider" step=0.2></span>
-	*
-	* @example
-	* var slider = new Nexus.Slider('#target')
-	*
-	* @example
-	* var slider = new Nexus.Slider('#target',{
-	*     'size': [120,20],
-	*     'mode': 'relative',  // 'relative' or 'absolute'
-	*     'min': 0,
-	*     'max': 1,
-	*     'step': 0,
-	*     'value': 0
-	* })
-	*
-	* @output
-	* change
-	* Fires when the interface's value changes. <br>
-	* Event data: <i>number</i> The number value of the interface.
-	*
-	* @outputexample
-	* slider.on('change',function(v) {
-	*   console.log(v);
-	* })
-	*
-	*
+	/** @property {object}  val  Object containing the core interactive aspects of the widget, which are also its data output. Has the following properties: 
+		| &nbsp; | data
+		| --- | ---
+		| *speed*| Current speed of the record player's rotation. (Normal is 1.)
 	*/
-	
-	var Slider = (function (_Interface) {
-	  function Slider() {
-	    _classCallCheck(this, Slider);
-	
-	    var options = ["min", "max", "value"];
-	
-	    var defaults = {
-	      size: [120, 20],
-	      mode: "relative", // 'relative' or 'absolute'
-	      min: 0,
-	      max: 1,
-	      step: 0,
-	      value: 0
-	    };
-	
-	    _get(Object.getPrototypeOf(Slider.prototype), "constructor", this).call(this, arguments, options, defaults);
-	
-	    this.orientation = "vertical"; // This will change automatically to 'horizontal'if the interface is wider than it is tall.
-	
-	    this._value = new Step(this.settings.min, this.settings.max, this.settings.step, this.settings.value);
-	
-	    this.position = new Interaction.Handle(this.settings.mode, this.orientation, [0, this.width], [this.height, 0]);
-	    this.position.value = this._value.normalized;
-	
-	    this.init();
-	
-	    this.position.direction = this.orientation;
-	
-	    this.emit("change", this.value);
-	  }
-	
-	  _inherits(Slider, _Interface);
-	
-	  _createClass(Slider, {
-	    buildInterface: {
-	      value: function buildInterface() {
-	
-	        this.bar = svg.create("rect");
-	        this.fillbar = svg.create("rect");
-	        this.knob = svg.create("circle");
-	
-	        this.element.appendChild(this.bar);
-	        this.element.appendChild(this.fillbar);
-	        this.element.appendChild(this.knob);
-	      }
-	    },
-	    sizeInterface: {
-	      value: function sizeInterface() {
-	
-	        if (this.width < this.height) {
-	          this.orientation = "vertical";
-	        } else {
-	          this.orientation = "horizontal";
-	        }
-	
-	        if (this.position) {
-	          this.position.resize([0, this.width], [this.height, 0]);
-	        }
-	
-	        var x = undefined,
-	            y = undefined,
-	            w = undefined,
-	            h = undefined,
-	            barOffset = undefined,
-	            cornerRadius = undefined;
-	        this.knobData = {
-	          level: 0,
-	          r: 0
-	        };
-	
-	        if (this.orientation === "vertical") {
-	          this.thickness = this.width / 2;
-	          x = this.width / 2;
-	          y = 0;
-	          w = this.thickness;
-	          h = this.height;
-	          this.knobData.r = this.thickness * 0.8;
-	          this.knobData.level = h - this.knobData.r - this.normalized * (h - this.knobData.r * 2);
-	          barOffset = "translate(" + this.thickness * -1 / 2 + ",0)";
-	          cornerRadius = w / 2;
-	        } else {
-	          this.thickness = this.height / 2;
-	          x = 0;
-	          y = this.height / 2;
-	          w = this.width;
-	          h = this.thickness;
-	          this.knobData.r = this.thickness * 0.8;
-	          this.knobData.level = this.normalized * (w - this.knobData.r * 2) + this.knobData.r;
-	          barOffset = "translate(0," + this.thickness * -1 / 2 + ")";
-	          cornerRadius = h / 2;
-	        }
-	
-	        this.bar.setAttribute("x", x);
-	        this.bar.setAttribute("y", y);
-	        this.bar.setAttribute("transform", barOffset);
-	        this.bar.setAttribute("rx", cornerRadius); // corner radius
-	        this.bar.setAttribute("ry", cornerRadius);
-	        this.bar.setAttribute("width", w);
-	        this.bar.setAttribute("height", h);
-	
-	        if (this.orientation === "vertical") {
-	          this.fillbar.setAttribute("x", x);
-	          this.fillbar.setAttribute("y", this.knobData.level);
-	          this.fillbar.setAttribute("width", w);
-	          this.fillbar.setAttribute("height", h - this.knobData.level);
-	        } else {
-	          this.fillbar.setAttribute("x", 0);
-	          this.fillbar.setAttribute("y", y);
-	          this.fillbar.setAttribute("width", this.knobData.level);
-	          this.fillbar.setAttribute("height", h);
-	        }
-	        this.fillbar.setAttribute("transform", barOffset);
-	        this.fillbar.setAttribute("rx", cornerRadius);
-	        this.fillbar.setAttribute("ry", cornerRadius);
-	
-	        if (this.orientation === "vertical") {
-	          this.knob.setAttribute("cx", x);
-	          this.knob.setAttribute("cy", this.knobData.level);
-	        } else {
-	          this.knob.setAttribute("cx", this.knobData.level);
-	          this.knob.setAttribute("cy", y);
-	        }
-	        this.knob.setAttribute("r", this.knobData.r);
-	      }
-	    },
-	    colorInterface: {
-	      value: function colorInterface() {
-	        this.bar.setAttribute("fill", this.colors.fill);
-	        this.fillbar.setAttribute("fill", this.colors.accent);
-	        this.knob.setAttribute("fill", this.colors.accent);
-	      }
-	    },
-	    render: {
-	      value: function render() {
-	        if (!this.clicked) {
-	          this.knobData.r = this.thickness * 0.75;
-	        }
-	        this.knob.setAttribute("r", this.knobData.r);
-	
-	        if (this.orientation === "vertical") {
-	          this.knobData.level = this.knobData.r + this._value.normalized * (this.height - this.knobData.r * 2);
-	          this.knob.setAttribute("cy", this.height - this.knobData.level);
-	          this.fillbar.setAttribute("y", this.height - this.knobData.level);
-	          this.fillbar.setAttribute("height", this.knobData.level);
-	        } else {
-	          this.knobData.level = this._value.normalized * (this.width - this.knobData.r * 2) + this.knobData.r;
-	          this.knob.setAttribute("cx", this.knobData.level);
-	          this.fillbar.setAttribute("x", 0);
-	          this.fillbar.setAttribute("width", this.knobData.level);
-	        }
-	      }
-	    },
-	    click: {
-	      value: function click() {
-	        this.knobData.r = this.thickness * 0.9;
-	        this.position.anchor = this.mouse;
-	        this.move();
-	      }
-	    },
-	    move: {
-	      value: function move() {
-	        if (this.clicked) {
-	          this.position.update(this.mouse);
-	          this._value.updateNormal(this.position.value);
-	          this.emit("change", this._value.value);
-	          this.render();
-	        }
-	      }
-	    },
-	    release: {
-	      value: function release() {
-	        this.render();
-	      }
-	    },
-	    normalized: {
-	      get: function () {
-	        return this._value.normalized;
-	      }
-	    },
-	    value: {
-	
-	      /**
-	      The slider's current value. If set manually, will update the interface and trigger the output event.
-	      @type {number}
-	      @example slider.value = 10;
-	      */
-	
-	      get: function () {
-	        return this._value.value;
-	      },
-	      set: function (v) {
-	        this._value.update(v);
-	        this.position.value = this._value.normalized;
-	        this.emit("change", this._value.value);
-	        this.render();
-	      }
-	    },
-	    min: {
-	
-	      /**
-	      Lower limit of the sliders's output range
-	      @type {number}
-	      @example slider.min = 1000;
-	      */
-	
-	      get: function () {
-	        return this._value.min;
-	      },
-	      set: function (v) {
-	        this._value.min = v;
-	      }
-	    },
-	    max: {
-	
-	      /**
-	      Upper limit of the slider's output range
-	      @type {number}
-	      @example slider.max = 1000;
-	      */
-	
-	      get: function () {
-	        return this._value.max;
-	      },
-	      set: function (v) {
-	        this._value.max = v;
-	      }
-	    },
-	    step: {
-	
-	      /**
-	      The increment that the slider's value changes by.
-	      @type {number}
-	      @example slider.step = 5;
-	      */
-	
-	      get: function () {
-	        return this._value.step;
-	      },
-	      set: function (v) {
-	        this._value.step = v;
-	      }
-	    },
-	    mode: {
-	
-	      /**
-	      Absolute mode (slider's value jumps to mouse click position) or relative mode (mouse drag changes value relative to its current position). Default: "relative".
-	      @type {string}
-	      @example slider.mode = "relative";
-	      */
-	
-	      get: function () {
-	        return this.position.mode;
-	      },
-	      set: function (v) {
-	        this.position.mode = v;
-	      }
-	    }
-	  });
-	
-	  return Slider;
-	})(Interface);
-	
-	module.exports = Slider;
+	this.val = {
+		speed: 0
+	}
+	this.init();
+	nx.aniItems.push(this.spin.bind(this));
+}
+util.inherits(vinyl, widget);
 
-/***/ }),
-/* 15 */
-/***/ (function(module, exports, __webpack_require__) {
+vinyl.prototype.init = function() {
 
-	"use strict";
+	this.circleSize = (Math.min(this.center.x, this.center.y)-this.lineWidth);
+	this.draw();
+}
+
+vinyl.prototype.draw = function() {
+	this.erase()
+
+	with (this.context) {
+		strokeStyle = this.colors.border;
+		fillStyle = this.colors.fill;
+		fillRect(0,0,this.GUI.w,this.GUI.h)
+		
+		//draw main circle
+		beginPath();
+		fillStyle = this.colors.black;
+		arc(this.center.x, this.center.y, this.circleSize-5, 0, Math.PI*2, true);
+		fill();
+		closePath();
+
+
+		//draw circle in center
+		beginPath();
+		fillStyle = this.colors.accent;
+		arc(this.center.x, this.center.y*1, this.circleSize/4, 0, Math.PI*2, false);
+		fill()
+		closePath();
+
+
+		//draw tint
+		beginPath();
+		globalAlpha = 0.5;
+		fillStyle = this.colors.fill;
+		arc(this.center.x, this.center.y, this.circleSize, this.rotation, this.rotation + 0.4, false);
+		lineTo(this.center.x, this.center.y);
+		arc(this.center.x, this.center.y, this.circleSize, this.rotation+Math.PI, this.rotation +Math.PI+ 0.4, false);
+		lineTo(this.center.x, this.center.y);
+		fill();
+		globalAlpha = 1;
+		closePath(); 
+
+
+		//draw white circle in center
+		beginPath();
+		fillStyle = this.colors.white;
+		arc(this.center.x, this.center.y*1, this.circleSize/16, 0, Math.PI*2, false);
+		fill()
+		closePath(); 
+
+	}
+
+	this.drawLabel();
+}
+
+vinyl.prototype.click = function(e) {
+	this.hasMovedOnce = false;
+	this.lastRotation = this.rotation
+	this.grabAngle = this.rotation % (Math.PI*2)
+	this.grabPos = math.toPolar(this.clickPos.x-this.center.x,this.clickPos.y-this.center.y).angle
+
+}
+
+vinyl.prototype.move = function() {
+
+	if (!this.hasMovedOnce) {
+		this.hasMovedOnce = true;
+		this.grabAngle = this.rotation % (Math.PI*2)
+		this.grabPos = math.toPolar(this.clickPos.x-this.center.x,this.clickPos.y-this.center.y).angle
+	}
+
+	this.rotation = math.toPolar(this.clickPos.x-this.center.x,this.clickPos.y-this.center.y).angle + this.grabAngle - this.grabPos	
+
+
+}
+
+vinyl.prototype.release = function() {
+	this.speed = ((this.rotation - this.lastRotation) + (this.lastRotation-this.lastRotation2))/2 ;
+}
+
+vinyl.prototype.spin = function() {
+
+	if (this.clicked) { 
+		this.speed /= 1.1;
+	} else {
+		this.speed = this.speed*0.9 + this.defaultspeed*0.1
+	}
+
+	// may need to math.clip(this.val.speed,-10,10);
+	this.val.speed = (this.rotation - this.lastRotation) * 20; // normalizes it to 1
+
+	this.lastRotation2 = this.lastRotation
+	this.lastRotation = this.rotation
+
+	this.rotation += this.speed
+
+	this.draw();
+
+	this.transmit(this.val)
 	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _get = function get(object, property, receiver) { var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { return get(parent, property, receiver); } } else if ("value" in desc && desc.writable) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } };
-	
-	var _inherits = function (subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) subClass.__proto__ = superClass; };
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var svg = __webpack_require__(4);
-	var ToggleModel = __webpack_require__(13);
-	var Interface = __webpack_require__(6);
-	
-	/**
-	* Toggle
-	*
-	* @description Binary switch
-	*
-	* @demo <span nexus-ui="toggle"></span>
-	*
-	* @example
-	* var toggle = new Nexus.Toggle('#target')
-	*
-	* @example
-	* var toggle = new Nexus.Toggle('#target',{
-	*     'size': [40,20],
-	*     'state': false
-	* })
-	*
-	* @output
-	* change
-	* Fires any time the interface's value changes. <br>
-	* Parameter: The boolean state of the interface.
-	*
-	* @outputexample
-	* toggle.on('change',function(v) {
-	*   console.log(v);
-	* })
-	*
-	*
+}
+
+vinyl.prototype.customDestroy = function() {
+	nx.removeAni(this.spin.bind(this));
+}
+},{"../core/widget":3,"../utils/math":6,"util":51}],44:[function(require,module,exports){
+var util = require('util');
+var widget = require('../core/widget');
+var math = require('../utils/math')
+
+/** 
+	@class waveform      
+	Waveform visualizer and selecter
+	```html
+	<canvas nx="waveform"></canvas>
+	```
+*/
+
+var waveform = module.exports = function (target) {
+	this.defaultSize = { width: 400, height: 125 };
+	widget.call(this, target);
+
+	/** @property {object}  val  Object containing core interactive aspects of widget, which are also its data output. Has the following properties: 
+		| &nbsp; | data
+		| --- | ---
+		| *starttime* | Waveform selection start position in milliseconds (integer)
+		| *stoptime* | Waveform selection end position in milliseconds (integer)
+		| *looptime* | Selection size, in milliseconds (integer)
+		| *start* | Waveform selection start, as fraction of waveform (float 0-1)
+		| *stop* | Waveform selection end, as fraction of waveform (float 0-1)
+		| *size* | Selection size, as fraction of waveform (float 0-1)
 	*/
-	
-	var Toggle = (function (_Interface) {
-	  function Toggle() {
-	    _classCallCheck(this, Toggle);
-	
-	    var options = ["value"];
-	
-	    var defaults = {
-	      size: [40, 20],
-	      target: false,
-	      state: false
-	    };
-	
-	    _get(Object.getPrototypeOf(Toggle.prototype), "constructor", this).call(this, arguments, options, defaults);
-	
-	    this._state = new ToggleModel(this.settings.state);
-	
-	    this.init();
-	  }
-	
-	  _inherits(Toggle, _Interface);
-	
-	  _createClass(Toggle, {
-	    buildInterface: {
-	      value: function buildInterface() {
-	
-	        this.bar = svg.create("rect");
-	        this.knob = svg.create("circle");
-	        this.element.appendChild(this.bar);
-	        this.element.appendChild(this.knob);
-	      }
-	    },
-	    sizeInterface: {
-	      value: function sizeInterface() {
-	
-	        if (this.height < this.width / 2) {
-	          this.knobSize = this.height / 2;
-	        } else {
-	          this.knobSize = this.width / 4;
-	        }
-	
-	        this.bar.setAttribute("x", this.width / 2 - this.knobSize * 1.5);
-	        this.bar.setAttribute("y", this.height / 2 - this.knobSize / 2);
-	        this.bar.setAttribute("rx", this.knobSize / 2);
-	        this.bar.setAttribute("ry", this.knobSize / 2);
-	        this.bar.setAttribute("width", this.knobSize * 3);
-	        this.bar.setAttribute("height", this.knobSize);
-	
-	        this.knob.setAttribute("cx", this.width / 2 - this.knobSize);
-	        this.knob.setAttribute("cy", this.height / 2);
-	        this.knob.setAttribute("r", this.knobSize);
-	      }
-	    },
-	    colorInterface: {
-	      value: function colorInterface() {
-	        this.knob.setAttribute("fill", this.colors.accent);
-	        this.render();
-	      }
-	    },
-	    render: {
-	      value: function render() {
-	        if (!this.state) {
-	          this.knob.setAttribute("cx", this.width / 2 - this.knobSize);
-	          this.bar.setAttribute("fill", this.colors.fill);
-	        } else {
-	          this.knob.setAttribute("cx", this.width / 2 + this.knobSize);
-	          this.bar.setAttribute("fill", this.colors.accent);
-	        }
-	      }
-	    },
-	    click: {
-	      value: function click() {
-	        this.flip();
-	        this.render();
-	        this.emit("change", this.state);
-	      }
-	    },
-	    state: {
-	
-	      /**
-	      Whether the toggle is currently on or off. Setting this property will update the toggle interface and trigger the output event.
-	      @type {boolean}
-	      @example toggle.state = false;
-	      */
-	
-	      get: function () {
-	        return this._state.state;
-	      },
-	      set: function (value) {
-	        this._state.flip(value);
-	        this.emit("change", this.state);
-	        this.render();
-	      }
-	    },
-	    flip: {
-	
-	      /**
-	      * Switch the toggle state to its opposite state
-	      * @example
-	      * toggle.flip();
-	      */
-	
-	      value: function flip() {
-	        this._state.flip();
-	        this.render();
-	      }
-	    }
-	  });
-	
-	  return Toggle;
-	})(Interface);
-	
-	module.exports = Toggle;
+	this.val = {
+		start: 0,
+		stop: 0,
+		size: 0,
+		starttime: 0,
+		stoptime: 0,
+		looptime: 0
+	}
 
-/***/ }),
-/* 16 */
-/***/ (function(module, exports, __webpack_require__) {
+	this.handle;
+	this.relhandle;
+	this.cap;
+	this.firsttouch = "start";
 
-	"use strict";
+	/** @property {Array} buffer  Contains multiple arrays of reduced buffer data, for visualization */
+	this.buffer = []
+
+	if (nx.isMobile) {
+		/** @property {integer} definition  Horizontal definition of the visualization. Value of 3 means the waveform will be represented in 3 pixel chunks. Higher numbers (4+) lead to a smaller graphics load. Smaller numbers (1-3) look better. Default is 1 for desktop renders, 3 for mobile renders. */
+		this.definition = 3;
+	} else {
+		this.definition = 1;
+	}
+
+	this.pieces = false;
+
+	/** @property {integer} channels  How many channels in the waveform */
+	this.channels = 1
+	this.rawbuffer = []
+
+	this.times = [
+		{ dur: 10 , format: 1 },
+		{ dur: 50 , format: 1 },
+		{ dur: 100 , format: 1 },
+		{ dur: 200 , format: 1 },
+		{ dur: 500 , format: 1 },
+		{ dur: 1000 , format: 1 },
+		{ dur: 2000 , format: 1 },
+		{ dur: 5000 , format: 1 },
+		{ dur: 10000 , format: 3 },
+		{ dur: 15000 , format: 3 },
+		{ dur: 60000 , format: 3 }, // 1 min
+		{ dur: 120000 , format: 3 }, // 2 mins
+		{ dur: 300000 , format: 3 }, // 5 mins
+		{ dur: 600000 , format: 3 }, // 10 mins
+	]
+	this.timescale = false
+
+	// to do --
+	// // sample rate adjustments
+	// .select(500,1000)
+
+	/** @property {string}  mode  Mode of interaction. "edge" mode lets you drag each edge of the waveform individually. "area" mode (default) lets you drag the waveform as a whole (with parallel mouse movement) or scale the waveform as a whole (with transverse mouse movement) */
+	this.mode = "area" // modes: "edge", "area"
+	this.touchdown = new Object();
+	this.init();
+}
+util.inherits(waveform, widget);
+
+waveform.prototype.init = function() {
+
+	this.pieces = ~~(this.GUI.w/this.definition);
+
+	this.draw();
+}
+
+
+/** 
+  @method setBuffer 
+  Load a web audio AudioBuffer into the waveform ui, for analysis and visualization.
+  @param {AudioBuffer} [buffer] The buffer to be loaded.
+  */
+waveform.prototype.setBuffer = function(prebuff) {
+
+	this.channels = prebuff.numberOfChannels
+	this.duration = prebuff.duration
+	this.sampleRate = prebuff.sampleRate
+	this.waveHeight = this.GUI.h / this.channels
+
+	// timescale
+	this.durationMS = (this.duration * 1000) 
+	this.timescale = 0
+	while (~~(this.durationMS/this.times[this.timescale].dur) > 7 && this.timescale < this.times.length ) {
+		this.timescale++;
+	}
+	this.timescale = this.times[this.timescale]
+
+	this.rawbuffer = []
+	this.buffer = []
+
+	// reduce/crush buffers
+	for (var i=0;i<this.channels;i++) {
+		this.rawbuffer.push(prebuff.getChannelData(0))
+		this.buffer.push([])
+
+		// counts faster (& less accurately) through larger buffers.
+		// for every 5 seconds in the buffer, our counter skips 1.
+		// so a 10 second buffer will only look at every 3rd sample
+		//   when calculating waveform.
+		var countinc = ~~(this.rawbuffer[0].length / (this.sampleRate*5)) + 1
+
+		var groupsize = ~~(this.rawbuffer[i].length/this.pieces)
+		var cmax = 0
+		var cmin = 0
+		var group = 0
+		var vis = []
+		for (var j=0;j<this.rawbuffer[i].length;j += countinc) {
+			if (this.rawbuffer[i][j]>0) {
+				cmax = Math.max(cmax,this.rawbuffer[i][j])
+			} else {
+				cmin = Math.min(cmin,this.rawbuffer[i][j])
+			}
+			if (j > group * groupsize) {
+				this.buffer[i].push([cmax,cmin])
+				group++
+				cmin = 0
+				cmax = 0
+			}
+		}
+	}
+
+	if (this.val.start && this.val.stop) {
+
+	}
+
+	this.val.starttime = Math.round(this.val.start * this.durationMS)
+	this.val.stoptime = Math.round(this.val.stop * this.durationMS)
+	this.val.looptime = Math.round(this.val.size * this.durationMS)
 	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
+
+	this.draw()
+
+}
+
+/** 
+  @method select 
+  Set the selection start and end points.
+  @param {integer} [start] Selection start point in milliseconds
+  @param {integer} [end] Selection end point in milliseconds
+  */
+waveform.prototype.select = function(start,stop) {
+	this.val.start = math.clip(start / this.durationMS,0,1)
+	this.val.stop = math.clip(stop / this.durationMS,0,1)
+	this.val.size = this.val.stop - this.val.start
+	this.val.starttime = start
+	this.val.stoptime = stop
+	this.val.looptime = start - stop
+	this.transmit(this.val)
+	this.draw()
+}
+
+
+waveform.prototype.draw = function() {
+	//this.erase();
+
+	with (this.context) {
+		//bg
+		fillStyle = this.colors.fill;
+		fillRect(0,0,this.GUI.w,this.GUI.h);
+
+		//waveform
+		for (var i=0;i<this.buffer.length;i++) {
+			fillStyle = this.colors.black
+			this.waveTop = i*this.waveHeight;
+			this.waveCenter = this.waveTop + this.waveHeight/2
+			for (var j=0;j<this.buffer[i].length;j++) {
+				var ht1 = this.waveCenter - this.buffer[i][j][0]*this.waveHeight
+				var ht2 = this.waveCenter + Math.abs(this.buffer[i][j][1]*this.waveHeight)
+				ht2 = ht2 - ht1
+				fillRect( j*this.definition, ht1 , this.definition, ht2)
+			}
+			this.buffer[i]
+
+		}
+
+		//time bar - top
+		globalAlpha = 0.3
+		fillStyle = this.colors.border
+		fillRect(0,0,this.GUI.w,16)
+		globalAlpha = 1
+
+
+		textBaseline = "middle"
+		textAlign = "left"
+		fontSize = "8px"
+
+		//time lines
+		if (this.timescale) {
+			for (var i=1; i<this.durationMS/this.timescale.dur; i++) {
+				var x = (i * this.timescale.dur) / this.durationMS
+				x *= this.GUI.w
+				fillStyle = this.colors.border
+				fillRect(x,0,1,this.GUI.h)
+				fillStyle = this.colors.black
+				globalAlpha = 0.6
+				fillText(this.msToTime(i * this.timescale.dur,this.timescale.format),x+5,8)
+				globalAlpha = 1
+			}	
+		} 
+		
+
+		// range selection
+		var x1 = this.val.start*this.GUI.w;
+		var y1 = 0;
+		var x2 = this.val.stop*this.GUI.w;
+		var y2 = this.GUI.h;
+	   
+		fillStyle = this.colors.accent;
+		strokeStyle = this.colors.accent;
+		lineWidth = 2
+		globalAlpha = 0.3
+		fillRect(x1,y1,x2-x1,y2-y1);
+		globalAlpha = 0.7
+		strokeRect(x1,y1-2,x2-x1,y2-y1+4);
+		if (this.durationMS && this.val.looptime) {
+			this.val.size = this.val.stop - this.val.start
+			textAlign = "center"
+			var dur = this.val.looptime
+			if (dur > 1000) {
+				dur /= 1000
+				math.prune(dur,2)
+				dur += ' s'
+			} else {
+				math.prune(dur,0)
+				dur += ' ms'
+			}
+			fillText(dur,x1 + (x2-x1)/2,this.GUI.h/2)
+		}
+		
+		globalAlpha = 1
+
+		
+	}
+
+}
+
+waveform.prototype.msToTime = function(rawms,format) {
+
+  var format = format ? format : 2
+
+  var s = ~~(rawms / 1000)
+  var secs = s % 60;
+  s = (s - secs) / 60;
+  var mins = s % 60;
+  var hrs = (s - mins) / 60;
+  var ms = rawms % 1000
+
+  //correct digits
+  secs = (secs < 10 && mins) ? secs + '0' : secs;
+  //ms = (ms < 10 && secs) ? ms + '0' : ms;
+
+  if (format==1) {
+  	return secs + '.' + ms;
+  } else if (format==2) {
+  	return mins + ':' + secs + '.' + ms;
+  } else if (format==3) {
+  	return mins + ':' + secs;
+  }
+
+}
+
+waveform.prototype.click = function() {
+	if (this.mode=="edge") {
+		if (Math.abs(this.clickPos.x-this.val.start*this.GUI.w) < Math.abs(this.clickPos.x-this.val.stop*this.GUI.w)) {
+			this.firsttouch = "start"
+		} else {
+			this.firsttouch = "stop"
+		}
+	} else if (this.mode=="area") {
+		this.touchdown = {
+			x: this.clickPos.x,
+			y: this.clickPos.y
+		}
+		this.startval = new Object();
+		this.startval.size = this.val.stop - this.val.start;
+		this.startval.loc = this.val.start + this.startval.size/2;
+	}
+	this.move();
+}
+
+waveform.prototype.move = function() {
+
+	if (this.mode=="edge") {
+		if (this.firsttouch=="start") {
+			this.val.start = this.clickPos.x/this.GUI.w;
+			if (this.clickPos.touches.length>1) {
+				this.val.stop = this.clickPos.touches[1].x/this.GUI.w;
+			}
+		} else {
+			this.val.stop = this.clickPos.x/this.GUI.w;
+			if (this.clickPos.touches.length>1) {
+				this.val.start = this.clickPos.touches[1].x/this.GUI.w;
+			}
+		}
 	
-	var _get = function get(object, property, receiver) { var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { return get(parent, property, receiver); } } else if ("value" in desc && desc.writable) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } };
+
+		if (this.val.stop < this.val.start) {
+			this.tempstart = this.val.start;
+			this.val.start = this.val.stop;
+			this.val.stop = this.tempstart;
+			if (this.firsttouch=="start") {
+				this.firsttouch = "stop";
+			} else {
+				this.firsttouch = "start";
+			}
+		} 
+		
+	} else if (this.mode=="area") {
+
+		var moveloc = this.clickPos.x/this.GUI.w;
+		var movesize = (this.touchdown.y - this.clickPos.y)/this.GUI.h;
 	
-	var _inherits = function (subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) subClass.__proto__ = superClass; };
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var svg = __webpack_require__(4);
-	var ButtonTemplate = __webpack_require__(17);
-	
-	/**
-	* Button
-	*
-	* @description Circular button with optional aftertouch.
-	*
-	* @demo <span nexus-ui="button"></span>
-	*
-	* @example
-	* var button = new Nexus.Button('#target')
-	*
-	* @example
-	* var button = new Nexus.Button('#target',{
-	*   'size': [80,80],
-	*   'mode': 'aftertouch',
-	*   'state': false
-	* })
-	*
-	* @output
-	* change
-	* Fires any time the interface's value changes. <br>
-	* In <b>button mode</b>, <b>toggle mode</b>, and <b>impulse mode</b>, the output data is a boolean describing the state of the button.<br>
-	* In <b>aftertouch mode</b>, the output data is an object containing x (0-1) and y (0-1) positions of aftertouch.
-	*
-	* @outputexample
-	* button.on('change',function(v) {
-	*   // v is the value of the button
-	*   console.log(v);
-	* })
-	*
+		movesize /= 4;
+		var size = this.startval.size + movesize;
+		size = math.clip(size,0.001,1);
+
+		this.val = {
+			start: moveloc - size/2,
+			stop: moveloc + size/2,
+		}
+
+	}
+
+	this.val.start = math.clip(this.val.start,0,1);
+	this.val.stop = math.clip(this.val.stop,0,1);
+
+	this.val['size'] = math.clip(Math.abs(this.val.stop - this.val.start), 0, 1)
+
+	if (this.durationMS) {
+		this.val["starttime"] = Math.round(this.val.start * this.durationMS)
+		this.val["stoptime"] = Math.round(this.val.stop * this.durationMS)
+		this.val["looptime"] = Math.round(this.val.size * this.durationMS)
+	}
+
+	this.transmit(this.val);
+	this.draw();
+
+}
+},{"../core/widget":3,"../utils/math":6,"util":51}],45:[function(require,module,exports){
+var util = require('util');
+var widget = require('../core/widget');
+var math = require('../utils/math')
+
+/** 
+	@class wavegrain      
+	wavegrain visualizer and selecter
+	```html
+	<canvas nx="wavegrain"></canvas>
+	```
+*/
+
+var wavegrain = module.exports = function (target) {
+	this.defaultSize = { width: 400, height: 125 };
+	widget.call(this, target);
+
+	/** @property {object}  val  Object containing core interactive aspects of widget, which are also its data output. Has the following properties: 
+		| &nbsp; | data
+		| --- | ---
+		| *starttime* | wavegrain selection start position in milliseconds (integer)
+		| *stoptime* | wavegrain selection end position in milliseconds (integer)
+		| *looptime* | Selection size, in milliseconds (integer)
 	*/
-	
-	var Button = (function (_ButtonTemplate) {
-	  function Button() {
-	    _classCallCheck(this, Button);
-	
-	    var options = ["mode"];
-	
-	    var defaults = {
-	      size: [80, 80],
-	      mode: "aftertouch", // button, aftertouch, impulse, toggle
-	      state: false
-	    };
-	
-	    _get(Object.getPrototypeOf(Button.prototype), "constructor", this).call(this, arguments, options, defaults);
-	
-	    /**
-	    * Interaction mode: supports "button", "aftertouch", "impulse", or "toggle"
-	    * @type {string}
-	    * @example button.mode = 'toggle';
-	    */
-	    this.mode = this.settings.mode;
-	
-	    this.init();
-	    this.render();
-	  }
-	
-	  _inherits(Button, _ButtonTemplate);
-	
-	  _createClass(Button, {
-	    buildInterface: {
-	      value: function buildInterface() {
-	        this.pad = svg.create("circle");
-	        this.element.appendChild(this.pad);
-	
-	        this.interactionTarget = this.pad;
-	
-	        // only used if in 'aftertouch' mode
-	        this.defs = svg.create("defs");
-	        this.element.appendChild(this.defs);
-	
-	        this.gradient = svg.radialGradient(this.defs, 2);
-	
-	        this.gradient.stops[0].setAttribute("offset", "30%");
-	
-	        this.gradient.stops[1].setAttribute("offset", "100%");
-	      }
-	    },
-	    sizeInterface: {
-	      value: function sizeInterface() {
-	
-	        this.pad.setAttribute("cx", this.width / 2);
-	        this.pad.setAttribute("cy", this.height / 2);
-	        this.pad.setAttribute("r", Math.min(this.width, this.height) / 2 - this.width / 40);
-	        this.pad.setAttribute("stroke-width", this.width / 20);
-	      }
-	    },
-	    colorInterface: {
-	      value: function colorInterface() {
-	
-	        this.gradient.stops[0].setAttribute("stop-color", this.colors.accent);
-	        this.gradient.stops[1].setAttribute("stop-color", this.colors.fill);
-	        this.render();
-	      }
-	    },
-	    render: {
-	
-	      /*
-	      * Update the visual interface using its current state
-	      *
-	      * @example
-	      * button.render();
-	      */
-	
-	      value: function render() {
-	        if (!this.state) {
-	          this.pad.setAttribute("fill", this.colors.fill);
-	          this.pad.setAttribute("stroke", this.colors.mediumLight);
-	        } else {
-	          if (this.mode === "aftertouch") {
-	            this.pad.setAttribute("stroke", "url(#" + this.gradient.id + ")");
-	            this.gradient.element.setAttribute("cx", this.position.x * 100 + "%");
-	            this.gradient.element.setAttribute("cy", (1 - this.position.y) * 100 + "%");
-	          } else {
-	            this.pad.setAttribute("stroke", this.colors.accent);
-	          }
-	          this.pad.setAttribute("fill", this.colors.accent);
-	        }
-	      }
-	    }
-	  });
-	
-	  return Button;
-	})(ButtonTemplate);
-	
-	module.exports = Button;
+	this.val = {
+		starttime: 0,
+		stoptime: 0,
+		looptime: 50,
+		start: 0,
+		stop: 0,
+		size: 0,
+		level: 0,
+		state: "off"
+	}
 
-/***/ }),
-/* 17 */
-/***/ (function(module, exports, __webpack_require__) {
+	this.handle;
+	this.relhandle;
+	this.cap;
+	this.firsttouch = "start";
 
-	"use strict";
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _get = function get(object, property, receiver) { var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { return get(parent, property, receiver); } } else if ("value" in desc && desc.writable) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } };
-	
-	var _inherits = function (subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) subClass.__proto__ = superClass; };
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var svg = __webpack_require__(4);
-	var math = __webpack_require__(5);
-	var ToggleModel = __webpack_require__(13);
-	var Interface = __webpack_require__(6);
-	
-	/**
-	Button Template
-	*/
-	
-	var ButtonTemplate = (function (_Interface) {
-	  function ButtonTemplate(args, options, defaults) {
-	    _classCallCheck(this, ButtonTemplate);
-	
-	    _get(Object.getPrototypeOf(ButtonTemplate.prototype), "constructor", this).call(this, args, options, defaults);
-	
-	    this.mode = this.settings.mode || "button";
-	
-	    this.position = {
-	      x: 0,
-	      y: 0
-	    };
-	
-	    this._state = new ToggleModel(this.settings.state);
-	  }
-	
-	  _inherits(ButtonTemplate, _Interface);
-	
-	  _createClass(ButtonTemplate, {
-	    buildInterface: {
-	      value: function buildInterface() {
-	        this.pad = svg.create("circle");
-	        this.pad.setAttribute("fill", "#d18");
-	        this.pad.setAttribute("stroke", "#d18");
-	        this.pad.setAttribute("stroke-width", 4);
-	
-	        this.element.appendChild(this.pad);
-	
-	        this.interactionTarget = this.pad;
-	
-	        this.sizeInterface();
-	      }
-	    },
-	    sizeInterface: {
-	      value: function sizeInterface() {
-	        this.pad.setAttribute("cx", this.width / 2);
-	        this.pad.setAttribute("cy", this.height / 2);
-	        this.pad.setAttribute("r", Math.min(this.width, this.height) / 2 - 2);
-	      }
-	    },
-	    render: {
-	      value: function render() {
-	        if (!this.state) {
-	          this.pad.setAttribute("fill", this.colors.fill);
-	          this.pad.setAttribute("stroke", this.colors.mediumLight);
-	        } else {
-	          this.pad.setAttribute("fill", this.colors.accent);
-	          this.pad.setAttribute("stroke", this.colors.accent);
-	        }
-	      }
-	    },
-	    down: {
-	      value: function down(paintbrush) {
-	        switch (this.mode) {
-	          case "impulse":
-	            this.turnOn();
-	            if (this.timeout) {
-	              clearTimeout(this.timeout);
-	            }
-	            this.timeout = setTimeout(this.turnOff.bind(this), 30);
-	            //    this.emit('change',this.state);
-	            break;
-	          case "button":
-	            this.turnOn();
-	            //    this.emit('change',this.state);
-	            break;
-	          case "aftertouch":
-	            this.position = {
-	              x: math.clip(this.mouse.x / this.width, 0, 1),
-	              y: math.clip(1 - this.mouse.y / this.height, 0, 1)
-	            };
-	            this.turnOn();
-	            //    this.emit('change',{
-	            //      state: this.state,
-	            //      x: this.position.x,
-	            //      y: this.position.y,
-	            //    });
-	            break;
-	          case "toggle":
-	            this.flip(paintbrush);
-	            //    this.emit('change',this.state);
-	            break;
-	        }
-	      }
-	    },
-	    bend: {
-	      value: function bend(mouse) {
-	        if (this.mode === "aftertouch") {
-	          this.mouse = mouse || this.mouse;
-	          this.position = {
-	            x: math.clip(this.mouse.x / this.width, 0, 1),
-	            y: math.clip(1 - this.mouse.y / this.height, 0, 1)
-	          };
-	          this.emit("change", {
-	            state: this.state,
-	            x: this.position.x,
-	            y: this.position.y });
-	          this.render();
-	        }
-	      }
-	    },
-	    up: {
-	      value: function up() {
-	        switch (this.mode) {
-	          case "button":
-	            this.turnOff();
-	            //  this.emit('change',this.state);
-	            break;
-	          case "aftertouch":
-	            this.turnOff();
-	            this.position = {
-	              x: math.clip(this.mouse.x / this.width, 0, 1),
-	              y: math.clip(1 - this.mouse.y / this.height, 0, 1)
-	            };
-	            //  this.emit('change',{
-	            //    state: this.state,
-	            //    x: this.position.x,
-	            //    y: this.position.y,
-	            //  });
-	            break;
-	        }
-	      }
-	    },
-	    click: {
-	
-	      /* overwritable interaction handlers */
-	
-	      value: function click() {
-	        this.down();
-	      }
-	    },
-	    move: {
-	      value: function move() {
-	        this.bend();
-	      }
-	    },
-	    release: {
-	      value: function release() {
-	        this.up();
-	      }
-	    },
-	    state: {
-	
-	      /**
-	      Whether the button is on (pressed) or off (not pressed)
-	      @type {boolean}
-	      @example button.state = true;
-	      */
-	
-	      get: function () {
-	        return this._state.state;
-	      },
-	      set: function (value) {
-	        this._state.flip(value);
-	        if (this.mode === "aftertouch") {
-	          this.emit("change", {
-	            state: this.state,
-	            x: this.position.x,
-	            y: this.position.y });
-	        } else {
-	          this.emit("change", this.state);
-	        }
-	        this.render();
-	      }
-	    },
-	    flip: {
-	
-	      /**
-	      Change the button to its alternate state (off=>on, on=>off), or flip it to a specified state.
-	      @param value {boolean} (Optional) State to flip to.
-	      @example button.flip();
-	      */
-	
-	      value: function flip(value) {
-	        this._state.flip(value);
-	        if (this.mode === "aftertouch") {
-	          this.emit("change", {
-	            state: this.state,
-	            x: this.position.x,
-	            y: this.position.y });
-	        } else {
-	          this.emit("change", this.state);
-	        }
-	        this.render();
-	      }
-	    },
-	    turnOn: {
-	
-	      /**
-	      Turn the button's state to true.
-	      @example button.turnOn();
-	      */
-	
-	      value: function turnOn(emitting) {
-	        this._state.on();
-	        if (emitting !== false) {
-	          if (this.mode === "aftertouch") {
-	            this.emit("change", {
-	              state: this.state,
-	              x: this.position.x,
-	              y: this.position.y });
-	          } else {
-	            this.emit("change", this.state);
-	          }
-	        }
-	        this.render();
-	      }
-	    },
-	    turnOff: {
-	
-	      /**
-	      Turn the button's state to false.
-	      @example button.turnOff();
-	      */
-	
-	      value: function turnOff(emitting) {
-	        this._state.off();
-	        if (emitting !== false) {
-	          if (this.mode === "aftertouch") {
-	            this.emit("change", {
-	              state: this.state,
-	              x: this.position.x,
-	              y: this.position.y });
-	          } else {
-	            this.emit("change", this.state);
-	          }
-	        }
-	        this.render();
-	      }
-	    }
-	  });
-	
-	  return ButtonTemplate;
-	})(Interface);
-	
-	module.exports = ButtonTemplate;
+	/** @property {Array} buffer  Contains multiple arrays of reduced buffer data, for visualization */
+	this.buffer = []
 
-/***/ }),
-/* 18 */
-/***/ (function(module, exports, __webpack_require__) {
+	if (nx.isMobile) {
+		/** @property {integer} definition  Horizontal definition of the visualization. Value of 3 means the wavegrain will be represented in 3 pixel chunks. Higher numbers (4+) lead to a smaller graphics load. Smaller numbers (1-3) look better. Default is 1 for desktop renders, 3 for mobile renders. */
+		this.definition = 1;
+	} else {
+		this.definition = 1;
+	}
 
-	"use strict";
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _get = function get(object, property, receiver) { var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { return get(parent, property, receiver); } } else if ("value" in desc && desc.writable) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } };
-	
-	var _inherits = function (subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) subClass.__proto__ = superClass; };
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var ButtonTemplate = __webpack_require__(17);
-	
-	/**
-	* TextButton
-	*
-	* @description Text button
-	*
-	* @demo <span nexus-ui="textButton"></span>
-	*
-	* @example
-	* var textbutton = new Nexus.TextButton('#target')
-	*
-	* @example
-	* var textbutton = new Nexus.TextButton('#target',{
-	*     'size': [150,50],
-	*     'state': false,
-	*     'text': 'Play',
-	*     'alternateText': 'Stop'
-	* })
-	*
-	* @output
-	* change
-	* Fires any time the interface's value changes. <br>
-	* The event data is a <i>string</i> of the text on the button at the moment it was clicked.
-	*
-	* @outputexample
-	* textbutton.on('change',function(v) {
-	*   console.log(v);
-	* })
-	*
-	*/
-	
-	var TextButton = (function (_ButtonTemplate) {
-	  function TextButton() {
-	    _classCallCheck(this, TextButton);
-	
-	    var options = ["value"];
-	
-	    var defaults = {
-	      size: [150, 50],
-	      state: false,
-	      text: "Play"
-	    };
-	
-	    _get(Object.getPrototypeOf(TextButton.prototype), "constructor", this).call(this, arguments, options, defaults);
-	
-	    this._text = this.settings.text;
-	
-	    if (this.settings.alternate) {
-	      //TODO: Remove this conditional in a breaking-changes release
-	      this.settings.alternateText = this.settings.alternate;
-	      console.warn("'alternate' initiator is deprecated. Use 'alternateText' instead.");
-	    }
-	    this._alternateText = this.settings.alternateText;
-	    this.mode = this.settings.alternateText ? "toggle" : "button";
-	    this.init();
-	    this.render();
-	
-	    this.state = this.settings.state;
-	  }
-	
-	  _inherits(TextButton, _ButtonTemplate);
-	
-	  _createClass(TextButton, {
-	    buildFrame: {
-	      value: function buildFrame() {
-	
-	        this.element = document.createElement("div");
-	        this.parent.appendChild(this.element);
-	
-	        this.textElement = document.createElement("div");
-	        this.textElement.innerHTML = this._text;
-	        this.element.appendChild(this.textElement);
-	      }
-	    },
-	    buildInterface: {
-	      value: function buildInterface() {}
-	    },
-	    colorInterface: {
-	      value: function colorInterface() {
-	        this.element.style.color = this.colors.dark;
-	        this.render();
-	      }
-	    },
-	    sizeInterface: {
-	      value: function sizeInterface() {
-	        var textsize = this.height / 3;
-	        var textsize2 = this.width / (this._text.length + 2);
-	        textsize = Math.min(textsize, textsize2);
-	        if (this.alternateText) {
-	          var textsize3 = this.width / (this.alternateText.length + 2);
-	          textsize = Math.min(textsize, textsize3);
-	        }
-	        var styles = "width: " + this.width + "px;";
-	        styles += "height: " + this.height + "px;";
-	        styles += "padding: " + (this.height - textsize) / 2 + "px 0px;";
-	        styles += "box-sizing: border-box;";
-	        styles += "text-align: center;";
-	        styles += "font-family: inherit;";
-	        styles += "font-weight: 700;";
-	        styles += "opacity: 1;";
-	        styles += "font-size:" + textsize + "px;";
-	        this.textElement.style.cssText = styles;
-	        this.render();
-	      }
-	    },
-	    render: {
-	      value: function render() {
-	        if (!this.state) {
-	          this.element.style.backgroundColor = this.colors.fill;
-	          this.textElement.style.color = this.colors.dark;
-	          this.textElement.innerHTML = this._text;
-	        } else {
-	          this.element.style.backgroundColor = this.colors.accent;
-	          this.textElement.style.color = this.colors.fill;
-	          if (this.alternateText) {
-	            this.textElement.innerHTML = this._alternateText;
-	          } else {
-	            this.textElement.innerHTML = this._text;
-	          }
-	        }
-	      }
-	    },
-	    alternateText: {
-	
-	      /**
-	      The text to display when the button is in its "on" state. If set, this puts the button in "toggle" mode.
-	      @type {String}
-	      */
-	
-	      get: function () {
-	        return this._alternateText;
-	      },
-	      set: function (text) {
-	        if (text) {
-	          this.mode = "toggle";
-	        } else {
-	          this.mode = "button";
-	        }
-	        this._alternateText = text;
-	        this.render();
-	      }
-	    },
-	    text: {
-	
-	      /**
-	      The text to display. (If .alternateText exists, then this .text will only be displayed when the button is in its "off" state.)
-	      @type {String}
-	      */
-	
-	      get: function () {
-	        return this._text;
-	      },
-	      set: function (text) {
-	        this._text = text;
-	        this.sizeInterface();
-	        this.render();
-	      }
-	    }
-	  });
-	
-	  return TextButton;
-	})(ButtonTemplate);
-	
-	module.exports = TextButton;
+	this.pieces = false;
 
-/***/ }),
-/* 19 */
-/***/ (function(module, exports, __webpack_require__) {
+	/** @property {integer} channels  How many channels in the wavegrain */
+	this.channels = 1
+	this.rawbuffer = []
 
-	"use strict";
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _get = function get(object, property, receiver) { var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { return get(parent, property, receiver); } } else if ("value" in desc && desc.writable) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } };
-	
-	var _inherits = function (subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) subClass.__proto__ = superClass; };
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	//let svg = require('../util/svg');
-	var Interface = __webpack_require__(6);
-	var Button = __webpack_require__(16);
-	
-	/**
-	* RadioButton
-	*
-	* @description An array of buttons. By default, selecting one button will deselect all other buttons, but this can be customized using the API below.
-	*
-	* @demo <div nexus-ui="RadioButton"></div>
-	*
-	* @example
-	* var radiobutton = new Nexus.RadioButton('#target')
-	*
-	* @example
-	* var radiobutton = new Nexus.RadioButton('#target',{
-	*   'size': [120,25],
-	*   'numberOfButtons': 4,
-	*   'active': -1
-	* })
-	*
-	* @output
-	* change
-	* Fires any time the interface's value changes. <br>
-	* The event data an <i>integer</i>, the index of the button that is currently on. If no button is selected, the value will be -1.
-	*
-	* @outputexample
-	* radiobutton.on('change',function(v) {
-	*   console.log(v);
-	* })
-	*
-	*/
-	
-	var RadioButton = (function (_Interface) {
-	  function RadioButton() {
-	    _classCallCheck(this, RadioButton);
-	
-	    var options = ["value"];
-	
-	    var defaults = {
-	      size: [120, 25],
-	      numberOfButtons: 4,
-	      active: -1
-	    };
-	
-	    _get(Object.getPrototypeOf(RadioButton.prototype), "constructor", this).call(this, arguments, options, defaults);
-	
-	    this.buttons = [];
-	    this._numberOfButtons = this.settings.numberOfButtons;
-	    this.active = this.settings.active;
-	
-	    this.init();
-	    this.render();
-	  }
-	
-	  _inherits(RadioButton, _Interface);
-	
-	  _createClass(RadioButton, {
-	    buildFrame: {
-	      value: function buildFrame() {
-	        this.element = document.createElement("div");
-	        this.parent.appendChild(this.element);
-	      }
-	    },
-	    buildInterface: {
-	      value: function buildInterface() {
-	
-	        for (var i = 0; i < this._numberOfButtons; i++) {
-	          var container = document.createElement("span");
-	
-	          var button = new Button(container, {
-	            mode: "toggle",
-	            component: true }, this.update.bind(this, i));
-	
-	          this.buttons.push(button);
-	          this.element.appendChild(container);
-	        }
-	      }
-	    },
-	    sizeInterface: {
-	      value: function sizeInterface() {
-	
-	        var buttonWidth = this.width / this._numberOfButtons;
-	        var buttonHeight = this.height;
-	
-	        for (var i = 0; i < this._numberOfButtons; i++) {
-	          this.buttons[i].resize(buttonWidth, buttonHeight);
-	        }
-	      }
-	    },
-	    colorInterface: {
-	      value: function colorInterface() {
-	        for (var i = 0; i < this._numberOfButtons; i++) {
-	          this.buttons[i].colors = this.colors;
-	          this.buttons[i].render();
-	        }
-	      }
-	    },
-	    update: {
-	      value: function update(index) {
-	        if (this.buttons[index].state) {
-	          this.select(index);
-	        } else {
-	          this.deselect();
-	        }
-	        //  this.render();
-	      }
-	    },
-	    render: {
-	      value: function render() {
-	        for (var i = 0; i < this.buttons.length; i++) {
-	          if (i === this.active) {
-	            this.buttons[i].turnOn(false);
-	          } else {
-	            this.buttons[i].turnOff(false);
-	          }
-	        }
-	      }
-	    },
-	    select: {
-	
-	      /**
-	      Select one button and deselect all other buttons.
-	      @param index {number} The index of the button to select
-	      */
-	
-	      value: function select(index) {
-	        if (index >= 0 && index < this.buttons.length) {
-	          this.active = index;
-	          this.emit("change", this.active);
-	          this.render();
-	        }
-	      }
-	    },
-	    deselect: {
-	
-	      /**
-	      Deselect all buttons.
-	      */
-	
-	      value: function deselect() {
-	        this.active = -1;
-	        this.emit("change", this.active);
-	        this.render();
-	      }
-	    },
-	    numberOfButtons: {
-	      get: function () {
-	        return this._numberOfButtons;
-	      },
-	
-	      /**
-	       * Update how many buttons are in the interface
-	       * @param  {number} buttons How many buttons are in the interface
-	       */
-	      set: function (buttons) {
-	        this._numberOfButtons = buttons;
-	        for (var i = 0; i < this.buttons.length; i++) {
-	          this.buttons[i].destroy();
-	        }
-	        this.buttons = [];
-	        //  for (let i=0;i<this.buttons.length;i++) {
-	        //    this.buttons[i].destroy();
-	        //  }
-	        this.empty();
-	        this.buildInterface();
-	      }
-	    }
-	  });
-	
-	  return RadioButton;
-	})(Interface);
-	
-	module.exports = RadioButton;
+	this.times = [
+		{ dur: 10 , format: 1 },
+		{ dur: 50 , format: 1 },
+		{ dur: 100 , format: 1 },
+		{ dur: 200 , format: 1 },
+		{ dur: 500 , format: 1 },
+		{ dur: 1000 , format: 1 },
+		{ dur: 2000 , format: 1 },
+		{ dur: 5000 , format: 1 },
+		{ dur: 10000 , format: 3 },
+		{ dur: 15000 , format: 3 },
+		{ dur: 60000 , format: 3 }, // 1 min
+		{ dur: 120000 , format: 3 }, // 2 mins
+		{ dur: 300000 , format: 3 }, // 5 mins
+		{ dur: 600000 , format: 3 }, // 10 mins
+	]
+	this.timescale = false
 
-/***/ }),
-/* 20 */
-/***/ (function(module, exports, __webpack_require__) {
+	// to do --
+	// // sample rate adjustments
+	// .select(500,1000)
 
-	"use strict";
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _get = function get(object, property, receiver) { var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { return get(parent, property, receiver); } } else if ("value" in desc && desc.writable) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } };
-	
-	var _inherits = function (subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) subClass.__proto__ = superClass; };
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var Interface = __webpack_require__(6);
-	var Step = __webpack_require__(11);
-	var math = __webpack_require__(5);
-	
-	/**
-	* Number
-	*
-	* @description Number interface which is controllable by dragging or typing.
-	*
-	* @demo <span nexus-ui="number"></span>
-	*
-	* @example
-	* var number = new Nexus.Number('#target')
-	*
-	* @example
-	* var number = new Nexus.Number('#target',{
-	*   'size': [60,30],
-	*   'value': 0,
-	*   'min': 0,
-	*   'max': 20000,
-	*   'step': 1
-	* })
-	*
-	* @output
-	* change
-	* Fires any time the interface's value changes. <br>
-	* The event data is the number value of the interface.
-	*
-	* @outputexample
-	* number.on('change',function(v) {
-	*   console.log(v);
-	* })
-	*
-	*
-	*/
-	
-	var Number = (function (_Interface) {
-	  function Number() {
-	    _classCallCheck(this, Number);
-	
-	    var options = ["value"];
-	
-	    var defaults = {
-	      size: [60, 30],
-	      value: 0,
-	      min: 0,
-	      max: 20000,
-	      step: 1
-	    };
-	
-	    _get(Object.getPrototypeOf(Number.prototype), "constructor", this).call(this, arguments, options, defaults);
-	
-	    this._value = new Step(this.settings.min, this.settings.max, this.settings.step, this.settings.value);
-	
-	    /*
-	    Default: 2. How many decimal places to clip the number's visual rendering to. This does not affect number's actual value output -- for that, set the step property to .01, .1, or 1.
-	    @type {number}
-	    @example number.decimalPlaces = 2;
-	    */
-	    this.decimalPlaces = 2;
-	    this.actual = 0;
-	
-	    this.max = this._value.max;
-	
-	    this.min = this._value.min;
-	
-	    this.step = this._value.step;
-	
-	    this.init();
-	    this.render();
-	  }
-	
-	  _inherits(Number, _Interface);
-	
-	  _createClass(Number, {
-	    buildFrame: {
-	      value: function buildFrame() {
-	        this.element = document.createElement("input");
-	        this.element.type = "text";
-	
-	        this.element.addEventListener("blur", (function () {
-	          this.element.style.backgroundColor = this.colors.fill;
-	          this.element.style.color = this.colors.dark;
-	          if (this.element.value !== this.value) {
-	            this.value = parseFloat(this.element.value);
-	            this.render();
-	          }
-	        }).bind(this));
-	
-	        this.element.addEventListener("keydown", (function (e) {
-	          if (e.which < 48 || e.which > 57) {
-	            if (e.which !== 189 && e.which !== 190 && e.which !== 8) {
-	              e.preventDefault();
-	            }
-	          }
-	          if (e.which === 13) {
-	            this.element.blur();
-	            this.value = this.element.value;
-	            this.emit("change", this.value);
-	            this.render();
-	          }
-	        }).bind(this));
-	
-	        this.parent.appendChild(this.element);
-	      }
-	    },
-	    sizeInterface: {
-	      value: function sizeInterface() {
-	
-	        this._minDimension = Math.min(this.width, this.height);
-	
-	        var styles = "width: " + this.width + "px;";
-	        styles += "height: " + this.height + "px;";
-	        styles += "background-color: #e7e7e7;";
-	        styles += "color: #333;";
-	        styles += "font-family: arial;";
-	        styles += "font-weight: 500;";
-	        styles += "font-size:" + this._minDimension / 2 + "px;";
-	        //  styles += 'highlight: #d18;';
-	        styles += "border: none;";
-	        styles += "outline: none;";
-	        styles += "padding: " + this._minDimension / 4 + "px " + this._minDimension / 4 + "px;";
-	        styles += "box-sizing: border-box;";
-	        styles += "userSelect: text;";
-	        styles += "mozUserSelect: text;";
-	        styles += "webkitUserSelect: text;";
-	        this.element.style.cssText += styles;
-	
-	        // to add eventually
-	        // var css = '#'+this.elementID+'::selection{ background-color: transparent }';
-	
-	        this.element.value = this.value;
-	      }
-	    },
-	    colorInterface: {
-	      value: function colorInterface() {
-	        this.element.style.backgroundColor = this.colors.fill;
-	        this.element.style.color = this.colors.dark;
-	      }
-	    },
-	    render: {
-	      value: function render() {
-	
-	        this.element.value = math.prune(this.value, this.decimalPlaces);
-	      }
-	    },
-	    click: {
-	      value: function click() {
-	        this.hasMoved = false;
-	        this.element.readOnly = true;
-	        this.actual = this.value;
-	        this.initial = { y: this.mouse.y };
-	        this.changeFactor = math.invert(this.mouse.x / this.width);
-	        console.log(this.changeFactor);
-	      }
-	    },
-	    move: {
-	      value: function move() {
-	        this.hasMoved = true;
-	        if (this.clicked) {
-	
-	          var newvalue = this.actual - (this.mouse.y - this.initial.y) * (math.clip(this.max - this.min, 0, 1000) / 200) * Math.pow(this.changeFactor, 2);
-	          this.value = newvalue;
-	
-	          this.render();
-	          if (this._value.changed) {
-	            this.emit("change", this.value);
-	          }
-	        }
-	      }
-	    },
-	    release: {
-	      value: function release() {
-	        if (!this.hasMoved) {
-	          this.element.readOnly = false;
-	          this.element.focus();
-	          this.element.setSelectionRange(0, this.element.value.length);
-	          this.element.style.backgroundColor = this.colors.accent;
-	          this.element.style.color = this.colors.light;
-	        } else {
-	          document.body.focus();
-	        }
-	      }
-	    },
-	    link: {
-	
-	      /**
-	      Connect this number interface to a dial or slider
-	      @param {Interface} element Element to connect to.
-	      @example number.link(slider)
-	      */
-	
-	      value: function link(destination) {
-	        var _this = this;
-	
-	        this.min = destination.min;
-	        this.max = destination.max;
-	        this.step = destination.step;
-	        destination.on("change", function (v) {
-	          _this.passiveUpdate(v);
-	        });
-	        this.on("change", function (v) {
-	          destination.value = v;
-	        });
-	        this.value = destination.value;
-	        /*  return {
-	            listener1: listener1,
-	            listener2: listener2,
-	            destroy: () => {
-	              listener1.remove() (or similar)
-	              listener2.remove() (or similar)
-	            }
-	          } */
-	      }
-	    },
-	    passiveUpdate: {
-	      value: function passiveUpdate(v) {
-	        this._value.update(v);
-	        this.render();
-	      }
-	    },
-	    value: {
-	
-	      /**
-	      The interface's current value. If set manually, will update the interface and trigger the output event.
-	      @type {number}
-	      @example number.value = 10;
-	      */
-	
-	      get: function () {
-	        return this._value.value;
-	      },
-	      set: function (v) {
-	        this._value.update(v);
-	        this.emit("change", this.value);
-	        this.render();
-	      }
-	    },
-	    min: {
-	
-	      /**
-	      Lower limit of the number's output range
-	      @type {number}
-	      @example number.min = 1000;
-	      */
-	
-	      get: function () {
-	        return this._value.min;
-	      },
-	      set: function (v) {
-	        this._value.min = v;
-	      }
-	    },
-	    max: {
-	
-	      /**
-	      Upper limit of the number's output range
-	      @type {number}
-	      @example number.max = 1000;
-	      */
-	
-	      get: function () {
-	        return this._value.max;
-	      },
-	      set: function (v) {
-	        this._value.max = v;
-	      }
-	    },
-	    step: {
-	
-	      /**
-	      The increment that the number's value changes by.
-	      @type {number}
-	      @example number.step = 5;
-	      */
-	
-	      get: function () {
-	        return this._value.step;
-	      },
-	      set: function (v) {
-	        this._value.step = v;
-	      }
-	    }
-	  });
-	
-	  return Number;
-	})(Interface);
-	
-	module.exports = Number;
+	/** @property {string}  mode  Mode of interaction. "edge" mode lets you drag each edge of the wavegrain individually. "area" mode (default) lets you drag the wavegrain as a whole (with parallel mouse movement) or scale the wavegrain as a whole (with transverse mouse movement) */
+	this.mode = "area" // modes: "edge", "area"
+	this.touchdown = new Object();
+	this.init();
+}
+util.inherits(wavegrain, widget);
 
-/***/ }),
-/* 21 */
-/***/ (function(module, exports, __webpack_require__) {
+wavegrain.prototype.init = function() {
 
-	"use strict";
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _get = function get(object, property, receiver) { var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { return get(parent, property, receiver); } } else if ("value" in desc && desc.writable) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } };
-	
-	var _inherits = function (subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) subClass.__proto__ = superClass; };
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var Interface = __webpack_require__(6);
-	
-	/**
-	* Select
-	*
-	* @description Dropdown menu
-	*
-	* @demo <span nexus-ui="select"></span>
-	*
-	* @example
-	* var select = new Nexus.Select('#target')
-	*
-	* @example
-	* var select = new Nexus.Select('#target',{
-	*   'size': [100,30],
-	*   'options': ['default','options']
-	* })
-	*
-	* @output
-	* change
-	* Fires any time the interface's value changes. <br>
-	* The event data is an object containing the text value of the selected option, as well as the numeric index of the selection.
-	*
-	* @outputexample
-	* select.on('change',function(v) {
-	*   console.log(v);
-	* })
-	*
-	*
-	*/
-	
-	var Select = (function (_Interface) {
-	  function Select() {
-	    _classCallCheck(this, Select);
-	
-	    var options = ["value"];
-	
-	    var defaults = {
-	      size: [100, 30],
-	      options: ["default", "options"]
-	    };
-	
-	    _get(Object.getPrototypeOf(Select.prototype), "constructor", this).call(this, arguments, options, defaults);
-	
-	    this._selectedIndex = -1;
-	    this._value = false;
-	
-	    this._options = this.settings.options;
-	
-	    this.init();
-	    this.render();
-	  }
-	
-	  _inherits(Select, _Interface);
-	
-	  _createClass(Select, {
-	    buildFrame: {
-	      value: function buildFrame() {
-	        this.element = document.createElement("select");
-	        this.element.style.fontSize = this.height / 2 + "px";
-	        this.element.style.outline = "none";
-	        this.element.style.highlight = "none";
-	        this.element.style.width = this.width + "px";
-	        this.element.style.height = this.height + "px";
-	
-	        this.boundRender = this.render.bind(this);
-	
-	        this.element.addEventListener("change", this.boundRender);
-	
-	        this.parent.appendChild(this.element);
-	      }
-	    },
-	    attachListeners: {
-	      value: function attachListeners() {}
-	    },
-	    buildInterface: {
-	      value: function buildInterface() {
-	
-	        this.defineOptions();
-	      }
-	    },
-	    colorInterface: {
-	      value: function colorInterface() {
-	        this.element.style.backgroundColor = this.colors.fill;
-	        this.element.style.color = this.colors.dark;
-	        this.element.style.border = "solid 0px " + this.colors.mediumLight;
-	      }
-	    },
-	    render: {
-	      value: function render() {
-	
-	        this._value = this.element.options[this.element.selectedIndex].text;
-	        this._selectedIndex = this.element.selectedIndex;
-	        this.emit("change", {
-	          value: this._value,
-	          index: this._selectedIndex
-	        });
-	      }
-	    },
-	    click: {
-	      value: function click() {}
-	    },
-	    move: {
-	      value: function move() {}
-	    },
-	    release: {
-	      value: function release() {}
-	    },
-	    defineOptions: {
-	
-	      /**
-	       * Update the list of options. This removes all existing options and creates a new list of options.
-	       * @param  {array} options New array of options
-	       */
-	
-	      value: function defineOptions(options) {
-	
-	        /*  function removeOptions(selectbox)
-	          {
-	              var i;
-	              for(i = selectbox.options.length - 1 ; i >= 0 ; i--)
-	              {
-	                  selectbox.remove(i);
-	              }
-	          }
-	          //using the function:
-	          removeOptions(document.getElementById("mySelectObject")); */
-	
-	        if (options) {
-	          this._options = options;
-	        }
-	
-	        for (var i = this.element.options.length - 1; i >= 0; i--) {
-	          this.element.remove(i);
-	        }
-	
-	        for (var i = 0; i < this._options.length; i++) {
-	          this.element.options.add(new Option(this._options[i], i));
-	        }
-	      }
-	    },
-	    value: {
-	
-	      /**
-	      The text of the option that is currently selected. If set, will update the interface and trigger the output event.
-	      @type {String}
-	      @example select.value = "sawtooth";
-	      */
-	
-	      get: function () {
-	        return this._value;
-	      },
-	      set: function (v) {
-	        this._value = v;
-	        for (var i = 0; i < this.element.options.length; i++) {
-	          if (v === this.element.options[i].text) {
-	            this.selectedIndex = i;
-	            break;
-	          }
-	        }
-	      }
-	    },
-	    selectedIndex: {
-	
-	      /**
-	      The numeric index of the option that is currently selected. If set, will update the interface and trigger the output event.
-	      @type {number}
-	      @example select.selectedIndex = 2;
-	      */
-	
-	      get: function () {
-	        return this._selectedIndex;
-	      },
-	      set: function (v) {
-	        this._selectedIndex = v;
-	        this.element.selectedIndex = v;
-	        this.render();
-	      }
-	    },
-	    customDestroy: {
-	      value: function customDestroy() {
-	        this.element.removeEventListener("change", this.boundRender);
-	      }
-	    }
-	  });
-	
-	  return Select;
-	})(Interface);
-	
-	module.exports = Select;
+	this.pieces = ~~(this.GUI.w/this.definition);
 
-/***/ }),
-/* 22 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	"use strict";
-	
-	var _interopRequireWildcard = function (obj) { return obj && obj.__esModule ? obj : { "default": obj }; };
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _get = function get(object, property, receiver) { var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { return get(parent, property, receiver); } } else if ("value" in desc && desc.writable) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } };
-	
-	var _inherits = function (subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) subClass.__proto__ = superClass; };
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var svg = __webpack_require__(4);
-	var math = __webpack_require__(5);
-	var Interface = __webpack_require__(6);
-	var Step = __webpack_require__(11);
-	
-	var Interaction = _interopRequireWildcard(__webpack_require__(12));
-	
-	/**
-	* Dial
-	*
-	*
-	* @description Dial with radial or linear interaction.
-	*
-	* @demo <span nexus-ui="dial"></span>
-	*
-	* @example
-	* var dial = new Nexus.Dial('#target')
-	*
-	* @example
-	* var dial = new Nexus.Dial('#target',{
-	*   'size': [75,75],
-	*   'interaction': 'radial', // "radial", "vertical", or "horizontal"
-	*   'mode': 'relative', // "absolute" or "relative"
-	*   'min': 0,
-	*   'max': 1,
-	*   'step': 0,
-	*   'value': 0
-	* })
-	*
-	* @output
-	* change
-	* Fires any time the interface's value changes. <br>
-	* The event data is the number value of the interface.
-	*
-	* @outputexample
-	* dial.on('change',function(v) {
-	*   console.log(v);
-	* })
-	*
-	* @tutorial
-	* Dial
-	* ygGMxq
-	*
-	*/
-	
-	var Dial = (function (_Interface) {
-	  function Dial() {
-	    _classCallCheck(this, Dial);
-	
-	    var options = ["min", "max", "value"];
-	
-	    var defaults = {
-	      size: [75, 75],
-	      interaction: "radial", // radial, vertical, horizontal
-	      mode: "relative", // absolute, relative
-	      min: 0,
-	      max: 1,
-	      step: 0,
-	      value: 0
-	    };
-	
-	    _get(Object.getPrototypeOf(Dial.prototype), "constructor", this).call(this, arguments, options, defaults);
-	
-	    this.interaction = this.settings.interaction;
-	
-	    this._value = new Step(this.settings.min, this.settings.max, this.settings.step, this.settings.value);
-	
-	    this.position = new Interaction.Handle(this.settings.mode, this.interaction, [0, this.width], [this.height, 0]);
-	
-	    this.init();
-	
-	    this.value = this._value.value;
-	
-	    this.position.value = this._value.normalized;
-	
-	    this.previousAngle = false;
-	
-	    this.emit("change", this.value);
-	  }
-	
-	  _inherits(Dial, _Interface);
-	
-	  _createClass(Dial, {
-	    buildInterface: {
-	      value: function buildInterface() {
-	
-	        this.background = svg.create("circle");
-	        this.screw = svg.create("circle");
-	        this.handle = svg.create("path");
-	        this.handle2 = svg.create("path");
-	        this.handleFill = svg.create("path");
-	        this.handle2Fill = svg.create("path");
-	        this.handleLine = svg.create("path");
-	
-	        this.element.appendChild(this.background);
-	        this.element.appendChild(this.handle);
-	        this.element.appendChild(this.handle2);
-	        this.element.appendChild(this.handleFill);
-	        this.element.appendChild(this.handle2Fill);
-	        this.element.appendChild(this.handleLine);
-	        this.element.appendChild(this.screw);
-	      }
-	    },
-	    sizeInterface: {
-	      value: function sizeInterface() {
-	
-	        this.position.resize([0, this.width], [this.height, 0]);
-	
-	        var center = {
-	          x: this.width / 2,
-	          y: this.height / 2
-	        };
-	
-	        var diameter = Math.min(this.width, this.height);
-	
-	        this.background.setAttribute("cx", center.x);
-	        this.background.setAttribute("cy", center.y);
-	        this.background.setAttribute("r", diameter / 2 - diameter / 40);
-	
-	        this.screw.setAttribute("cx", center.x);
-	        this.screw.setAttribute("cy", center.y);
-	        this.screw.setAttribute("r", diameter / 12);
-	
-	        var value = this.value;
-	
-	        var handlePoints = {
-	          start: Math.PI * 1.5,
-	          end: math.clip(math.scale(value, 0, 0.5, Math.PI * 1.5, Math.PI * 0.5), Math.PI * 0.5, Math.PI * 1.5)
-	        };
-	        var handle2Points = {
-	          start: Math.PI * 2.5,
-	          end: math.clip(math.scale(value, 0.5, 1, Math.PI * 2.5, Math.PI * 1.5), Math.PI * 1.5, Math.PI * 2.5)
-	        };
-	
-	        var handlePath = svg.arc(center.x, center.y, diameter / 2 - diameter / 40, handlePoints.start, handlePoints.end);
-	        var handle2Path = svg.arc(center.x, center.y, diameter / 2 - diameter / 40, handle2Points.start, handle2Points.end);
-	
-	        this.handle.setAttribute("d", handlePath);
-	        this.handle.setAttribute("stroke-width", diameter / 20);
-	        this.handle.setAttribute("fill", "none");
-	
-	        this.handle2.setAttribute("d", handle2Path);
-	        this.handle2.setAttribute("stroke-width", diameter / 20);
-	        this.handle2.setAttribute("fill", "none");
-	
-	        handlePath += " L " + center.x + " " + center.y;
-	
-	        this.handleFill.setAttribute("d", handlePath);
-	        this.handleFill.setAttribute("fill-opacity", "0.3");
-	
-	        handle2Path += " L " + center.x + " " + center.y;
-	
-	        this.handle2Fill.setAttribute("d", handle2Path);
-	        this.handle2Fill.setAttribute("fill-opacity", "0.3");
-	
-	        var arcEndingA = undefined;
-	        if (value < 0.5) {
-	          arcEndingA = handlePoints.end;
-	        } else {
-	          arcEndingA = handle2Points.end;
-	        }
-	
-	        var arcEndingX = center.x + Math.cos(arcEndingA) * (diameter / 2);
-	        var arcEndingY = center.y + Math.sin(arcEndingA) * (diameter / 2) * -1;
-	
-	        this.handleLine.setAttribute("d", "M " + center.x + " " + center.y + " L " + arcEndingX + " " + arcEndingY);
-	        this.handleLine.setAttribute("stroke-width", diameter / 20);
-	      }
-	    },
-	    colorInterface: {
-	      value: function colorInterface() {
-	        this.background.setAttribute("fill", this.colors.fill);
-	        this.screw.setAttribute("fill", this.colors.accent);
-	        this.handle.setAttribute("stroke", this.colors.accent);
-	        this.handle2.setAttribute("stroke", this.colors.accent);
-	        this.handleFill.setAttribute("fill", this.colors.accent);
-	        this.handle2Fill.setAttribute("fill", this.colors.accent);
-	        this.handleLine.setAttribute("stroke", this.colors.accent);
-	      }
-	    },
-	    render: {
-	      value: function render() {
-	        var value = this._value.normalized;
-	
-	        var center = {
-	          x: this.width / 2,
-	          y: this.height / 2
-	        };
-	
-	        var diameter = Math.min(this.width, this.height);
-	
-	        var handlePoints = {
-	          start: Math.PI * 1.5,
-	          end: math.clip(math.scale(value, 0, 0.5, Math.PI * 1.5, Math.PI * 0.5), Math.PI * 0.5, Math.PI * 1.5)
-	        };
-	        var handle2Points = {
-	          start: Math.PI * 2.5,
-	          end: math.clip(math.scale(value, 0.5, 1, Math.PI * 2.5, Math.PI * 1.5), Math.PI * 1.5, Math.PI * 2.5)
-	        };
-	
-	        var handlePath = svg.arc(center.x, center.y, diameter / 2 - diameter / 40, handlePoints.start, handlePoints.end);
-	        var handle2Path = svg.arc(center.x, center.y, diameter / 2 - diameter / 40, handle2Points.start, handle2Points.end);
-	
-	        this.handle.setAttribute("d", handlePath);
-	        this.handle2.setAttribute("d", handle2Path);
-	
-	        handlePath += " L " + center.x + " " + center.y;
-	
-	        this.handleFill.setAttribute("d", handlePath);
-	
-	        handle2Path += " L " + center.x + " " + center.y;
-	
-	        this.handle2Fill.setAttribute("d", handle2Path);
-	
-	        var arcEndingA = undefined;
-	        if (value <= 0.5) {
-	          arcEndingA = handlePoints.end;
-	        } else {
-	          arcEndingA = handle2Points.end;
-	        }
-	
-	        var arcEndingX = center.x + Math.cos(arcEndingA) * (diameter / 2);
-	        var arcEndingY = center.y + Math.sin(arcEndingA) * (diameter / 2) * -1;
-	
-	        this.handleLine.setAttribute("d", "M " + center.x + " " + center.y + " L " + arcEndingX + " " + arcEndingY);
-	      }
-	    },
-	    click: {
-	      value: function click() {
-	        if (this.mode === "relative") {
-	          this.previousAngle = false;
-	        }
-	        this.position.anchor = this.mouse;
-	        this.position.value = this._value.normalized;
-	        this.move();
-	      }
-	    },
-	    move: {
-	      value: function move() {
-	        if (this.clicked) {
-	
-	          this.position.update(this.mouse);
-	
-	          var angle = this.position.value * Math.PI * 2;
-	
-	          if (angle < 0) {
-	            angle += Math.PI * 2;
-	          }
-	
-	          if (this.mode === "relative") {
-	            if (this.previousAngle !== false && Math.abs(this.previousAngle - angle) > 2) {
-	              if (this.previousAngle > 3) {
-	                angle = Math.PI * 2;
-	              } else {
-	                angle = 0;
-	              }
-	            }
-	          } /* else {
-	            if (this.previousAngle !== false && Math.abs(this.previousAngle - angle) > 2) {
-	              if (this.previousAngle > 3) {
-	                angle = Math.PI*2;
-	              } else {
-	                angle = 0;
-	              }
-	            }
-	            } */
-	          this.previousAngle = angle;
-	
-	          var realValue = angle / (Math.PI * 2);
-	
-	          this.value = this._value.updateNormal(realValue);
-	
-	          if (this.mode === "relative") {
-	            this.position.value = realValue;
-	          }
-	
-	          this.emit("change", this._value.value);
-	
-	          this.render();
-	        }
-	      }
-	    },
-	    release: {
-	      value: function release() {}
-	    },
-	    value: {
-	
-	      /*
-	      Dial's value. When set, it will automatically be adjust to fit min/max/step settings of the interface.
-	      @type {number}
-	      @example dial.value = 10;
-	       get value() {
-	        return this._value.value;
-	      }
-	       set value(value) {
-	        this._value.update(value);
-	        this.emit('change',this.value);
-	        this.render();
-	      }
-	      */
-	
-	      /**
-	      Dial's value. When set, it will automatically be adjust to fit min/max/step settings of the interface.
-	      @type {number}
-	      @example dial.value = 10;
-	      */
-	
-	      get: function () {
-	        return this._value.value;
-	      },
-	      set: function (v) {
-	        this._value.update(v);
-	        this.position.value = this._value.normalized;
-	        this.emit("change", this._value.value);
-	        this.render();
-	      }
-	    },
-	    min: {
-	
-	      /**
-	      Lower limit of the dial's output range
-	      @type {number}
-	      @example dial.min = 1000;
-	      */
-	
-	      get: function () {
-	        return this._value.min;
-	      },
-	      set: function (v) {
-	        this._value.min = v;
-	      }
-	    },
-	    max: {
-	
-	      /**
-	      Upper limit of the dial's output range
-	      @type {number}
-	      @example dial.max = 1000;
-	      */
-	
-	      get: function () {
-	        return this._value.max;
-	      },
-	      set: function (v) {
-	        this._value.max = v;
-	      }
-	    },
-	    step: {
-	
-	      /**
-	      The increment that the dial's value changes by.
-	      @type {number}
-	      @example dial.step = 5;
-	      */
-	
-	      get: function () {
-	        return this._value.step;
-	      },
-	      set: function (v) {
-	        this._value.step = v;
-	      }
-	    },
-	    mode: {
-	
-	      /**
-	      Absolute mode (dial's value jumps to mouse click position) or relative mode (mouse drag changes value relative to its current position). Default: "relative".
-	      @type {string}
-	      @example dial.mode = "relative";
-	      */
-	
-	      get: function () {
-	        return this.position.mode;
-	      },
-	      set: function (v) {
-	        this.position.mode = v;
-	      }
-	    },
-	    normalized: {
-	
-	      /**
-	      Normalized value of the dial.
-	      @type {number}
-	      @example dial.normalized = 0.5;
-	      */
-	
-	      get: function () {
-	        return this._value.normalized;
-	      },
-	      set: function (v) {
-	        this._value.updateNormal(v);
-	        this.emit("change", this.value);
-	      }
-	    }
-	  });
-	
-	  return Dial;
-	})(Interface);
-	
-	module.exports = Dial;
-
-/***/ }),
-/* 23 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	"use strict";
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _get = function get(object, property, receiver) { var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { return get(parent, property, receiver); } } else if ("value" in desc && desc.writable) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } };
-	
-	var _inherits = function (subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) subClass.__proto__ = superClass; };
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var svg = __webpack_require__(4);
-	var Interface = __webpack_require__(6);
-	var ButtonTemplate = __webpack_require__(17);
-	var touch = __webpack_require__(9);
-	
-	var PianoKey = (function (_ButtonTemplate) {
-	  function PianoKey() {
-	    _classCallCheck(this, PianoKey);
-	
-	    var options = ["value", "note", "color"];
-	
-	    var defaults = {
-	      size: [80, 80],
-	      target: false,
-	      mode: "button",
-	      value: 0
-	    };
-	
-	    _get(Object.getPrototypeOf(PianoKey.prototype), "constructor", this).call(this, arguments, options, defaults);
-	
-	    this.note = this.settings.note;
-	    this.color = this.settings.color;
-	
-	    this.colors = {
-	      w: "#fff",
-	      b: "#666" };
-	
-	    this.init();
-	    this.render();
-	  }
-	
-	  _inherits(PianoKey, _ButtonTemplate);
-	
-	  _createClass(PianoKey, {
-	    buildFrame: {
-	      value: function buildFrame() {
-	        this.element = svg.create("svg");
-	        this.element.setAttribute("width", this.width);
-	        this.element.setAttribute("height", this.height);
-	        this.parent.appendChild(this.element);
-	      }
-	    },
-	    buildInterface: {
-	      value: function buildInterface() {
-	        var _this = this;
-	
-	        this.pad = svg.create("rect");
-	
-	        this.element.appendChild(this.pad);
-	
-	        this.interactionTarget = this.pad;
-	
-	        /* events */
-	
-	        if (!touch.exists) {
-	
-	          this.click = function () {
-	            //  console.log('click');
-	            _this.piano.interacting = true;
-	            _this.piano.paintbrush = !_this.state;
-	            _this.down(_this.piano.paintbrush);
-	          };
-	
-	          this.pad.addEventListener("mouseover", function () {
-	            if (_this.piano.interacting) {
-	              //    console.log('mouseover');
-	              _this.down(_this.piano.paintbrush);
-	            }
-	          });
-	
-	          this.move = function () {
-	            if (_this.piano.interacting) {
-	              //  console.log('move');
-	              _this.bend();
-	            }
-	          };
-	
-	          this.release = function () {
-	            _this.piano.interacting = false;
-	            //  console.log('release');
-	            //  this.up();
-	          };
-	          this.pad.addEventListener("mouseup", function () {
-	            if (_this.piano.interacting) {
-	              //  console.log('mouseup');
-	              _this.up();
-	            }
-	          });
-	          this.pad.addEventListener("mouseout", function () {
-	            if (_this.piano.interacting) {
-	              //  console.log('mouseout');
-	              _this.up();
-	            }
-	          });
-	        }
-	      }
-	    },
-	    sizeInterface: {
-	      value: function sizeInterface() {
-	
-	        //let radius = Math.min(this.width,this.height) / 5;
-	        var radius = 0;
-	
-	        this.pad.setAttribute("x", 0.5);
-	        this.pad.setAttribute("y", 0.5);
-	        if (this.width > 2) {
-	          this.pad.setAttribute("width", this.width - 1);
-	        } else {
-	          this.pad.setAttribute("width", this.width);
-	        }
-	        if (this.height > 2) {
-	          this.pad.setAttribute("height", this.height);
-	        } else {
-	          this.pad.setAttribute("height", this.height);
-	        }
-	        this.pad.setAttribute("rx", radius);
-	        this.pad.setAttribute("ry", radius);
-	      }
-	    },
-	    render: {
-	      value: function render() {
-	        if (!this.state) {
-	          this.pad.setAttribute("fill", this.colors[this.color]);
-	        } else {
-	          this.pad.setAttribute("fill", this.colors.accent);
-	        }
-	      }
-	    }
-	  });
-	
-	  return PianoKey;
-	})(ButtonTemplate);
-	
-	/**
-	* Piano
-	*
-	* @description Piano keyboard interface
-	*
-	* @demo <div nexus-ui="piano"></div>
-	*
-	* @example
-	* var piano = new Nexus.Piano('#target')
-	*
-	* @example
-	* var piano = new Nexus.Piano('#target',{
-	*     'size': [500,125],
-	*     'mode': 'button',  // 'button', 'toggle', or 'impulse'
-	*     'lowNote': 24,
-	*     'highNote': 60
-	* })
-	*
-	* @output
-	* change
-	* Fires any time a new key is pressed or released <br>
-	* The event data is an object containing <i>note</i> and <i>state</i> properties.
-	*
-	* @outputexample
-	* piano.on('change',function(v) {
-	*   console.log(v);
-	* })
-	*
-	*/
-	
-	var Piano = (function (_Interface) {
-	  function Piano() {
-	    _classCallCheck(this, Piano);
-	
-	    var options = ["value"];
-	
-	    var defaults = {
-	      size: [500, 125],
-	      lowNote: 24,
-	      highNote: 60,
-	      mode: "button"
-	    };
-	
-	    _get(Object.getPrototypeOf(Piano.prototype), "constructor", this).call(this, arguments, options, defaults);
-	
-	    this.keyPattern = ["w", "b", "w", "b", "w", "w", "b", "w", "b", "w", "b", "w"];
-	
-	    this.paintbrush = false;
-	
-	    this.mode = this.settings.mode;
-	
-	    this.range = {
-	      low: this.settings.lowNote,
-	      high: this.settings.highNote
-	    };
-	
-	    this.range.size = this.range.high - this.range.low + 1;
-	
-	    this.keys = [];
-	
-	    this.toggleTo = false;
-	
-	    this.init();
-	    this.render();
-	  }
-	
-	  _inherits(Piano, _Interface);
-	
-	  _createClass(Piano, {
-	    buildFrame: {
-	      value: function buildFrame() {
-	        this.element = document.createElement("div");
-	        this.element.style.position = "relative";
-	        this.element.style.borderRadius = "0px";
-	        this.element.style.display = "block";
-	        this.element.style.width = "100%";
-	        this.element.style.height = "100%";
-	        this.parent.appendChild(this.element);
-	      }
-	    },
-	    buildInterface: {
-	      value: function buildInterface() {
-	
-	        this.keys = [];
-	
-	        for (var i = 0; i < this.range.size; i++) {
-	
-	          var container = document.createElement("span");
-	          var scaleIndex = (i + this.range.low) % this.keyPattern.length;
-	
-	          var key = new PianoKey(container, {
-	            component: true,
-	            note: i + this.range.low,
-	            color: this.keyPattern[scaleIndex],
-	            mode: this.mode
-	          }, this.keyChange.bind(this, i + this.range.low));
-	
-	          key.piano = this;
-	
-	          if (touch.exists) {
-	            key.pad.index = i;
-	            key.preClick = key.preMove = key.preRelease = function () {};
-	            key.click = key.move = key.release = function () {};
-	            key.preTouch = key.preTouchMove = key.preTouchRelease = function () {};
-	            key.touch = key.touchMove = key.touchRelease = function () {};
-	          }
-	
-	          this.keys.push(key);
-	          this.element.appendChild(container);
-	        }
-	        if (touch.exists) {
-	          this.addTouchListeners();
-	        }
-	      }
-	    },
-	    sizeInterface: {
-	      value: function sizeInterface() {
-	
-	        var keyX = 0;
-	
-	        var keyPositions = [];
-	
-	        for (var i = 0; i < this.range.size; i++) {
-	
-	          keyPositions.push(keyX);
-	
-	          var scaleIndex = (i + this.range.low) % this.keyPattern.length;
-	          var nextScaleIndex = (i + 1 + this.range.low) % this.keyPattern.length;
-	          if (i + 1 + this.range.low >= this.range.high) {
-	            keyX += 1;
-	          } else if (this.keyPattern[scaleIndex] === "w" && this.keyPattern[nextScaleIndex] === "w") {
-	            keyX += 1;
-	          } else {
-	            keyX += 0.5;
-	          }
-	        }
-	        var keysWide = keyX;
-	
-	        //  let padding = this.width / 120;
-	        var padding = 1;
-	        var buttonWidth = (this.width - padding * 2) / keysWide;
-	        var buttonHeight = (this.height - padding * 2) / 2;
-	
-	        for (var i = 0; i < this.keys.length; i++) {
-	
-	          var container = this.keys[i].parent;
-	          container.style.position = "absolute";
-	          container.style.left = keyPositions[i] * buttonWidth + padding + "px";
-	          if (this.keys[i].color === "w") {
-	            container.style.top = padding + "px";
-	            this.keys[i].resize(buttonWidth, buttonHeight * 2);
-	          } else {
-	            container.style.zIndex = 1;
-	            container.style.top = padding + "px";
-	            this.keys[i].resize(buttonWidth, buttonHeight * 1.1);
-	          }
-	        }
-	      }
-	    },
-	    colorInterface: {
-	      value: function colorInterface() {
-	
-	        // Piano keys don't actually have a stroke border
-	        // They have space between them, which shows the Piano bg color
-	        this.element.style.backgroundColor = this.colors.mediumLight;
-	
-	        for (var i = 0; i < this.keys.length; i++) {
-	          this.keys[i].colors = {
-	            w: this.colors.light,
-	            b: this.colors.dark,
-	            accent: this.colors.accent,
-	            border: this.colors.mediumLight
-	          };
-	          this.keys[i].colorInterface();
-	          this.keys[i].render();
-	        }
-	      }
-	    },
-	    keyChange: {
-	      value: function keyChange(note, on) {
-	        // emit data for any key turning on/off
-	        // "note" is the note value
-	        // "on" is a boolean whether it is on or off
-	        // in aftertouch mode, "on: is an object with state/x/y properties
-	        var data = {
-	          note: note
-	        };
-	        if (typeof on === "object") {
-	          data.state = on.state;
-	          //  data.x = on.x
-	          //  data.y = on.y
-	        } else {
-	          data.state = on;
-	        }
-	        this.emit("change", data);
-	      }
-	    },
-	    render: {
-	
-	      /* drag(note,on) {
-	        this.emit('change',{
-	          note: note,
-	          state: on
-	        });
-	      } */
-	
-	      value: function render() {}
-	    },
-	    addTouchListeners: {
-	      value: function addTouchListeners() {
-	        var _this = this;
-	
-	        this.preClick = this.preMove = this.preRelease = function () {};
-	        this.click = this.move = this.release = function () {};
-	        this.preTouch = this.preTouchMove = this.preTouchRelease = function () {};
-	        this.touch = this.touchMove = this.touchRelease = function () {};
-	
-	        this.currentElement = false;
-	
-	        this.element.addEventListener("touchstart", function (e) {
-	          console.log("touchstart");
-	          var element = document.elementFromPoint(e.targetTouches[0].clientX, e.targetTouches[0].clientY);
-	          var key = _this.keys[element.index];
-	          _this.paintbrush = !key.state;
-	          key.down(_this.paintbrush);
-	          _this.currentElement = element.index;
-	          e.preventDefault();
-	          e.stopPropagation();
-	        });
-	
-	        this.element.addEventListener("touchmove", function (e) {
-	          var element = document.elementFromPoint(e.targetTouches[0].clientX, e.targetTouches[0].clientY);
-	          var key = _this.keys[element.index];
-	          if (element.index !== _this.currentElement) {
-	            if (_this.currentElement) {
-	              var pastKey = _this.keys[_this.currentElement];
-	              pastKey.up();
-	            }
-	            key.down(_this.paintbrush);
-	          } else {
-	            key.bend();
-	          }
-	          _this.currentElement = element.index;
-	          e.preventDefault();
-	          e.stopPropagation();
-	        });
-	
-	        this.element.addEventListener("touchend", function (e) {
-	          // no touches to calculate because none remaining
-	          var key = _this.keys[_this.currentElement];
-	          key.up();
-	          _this.interacting = false;
-	          _this.currentElement = false;
-	          e.preventDefault();
-	          e.stopPropagation();
-	        });
-	      }
-	    },
-	    setRange: {
-	
-	      /**
-	      Define the pitch range (lowest and highest note) of the piano keyboard.
-	      @param low {number} MIDI note value of the lowest note on the keyboard
-	      @param high {number} MIDI note value of the highest note on the keyboard
-	      */
-	
-	      value: function setRange(low, high) {
-	        this.range.low = low;
-	        this.range.high = high;
-	        this.empty();
-	        this.buildInterface();
-	      }
-	    },
-	    toggleKey: {
-	
-	      /**
-	      Turn a key on or off using its MIDI note value;
-	      @param note {number} MIDI note value of the key to change
-	      @param on {boolean} Whether the note should turn on or off
-	      */
-	
-	      value: function toggleKey(note, on) {
-	        this.keys[note - this.range.low].flip(on);
-	      }
-	    },
-	    toggleIndex: {
-	
-	      /**
-	      Turn a key on or off using its key index on the piano interface.
-	      @param index {number} Index of the key to change
-	      @param on {boolean} Whether the note should turn on or off
-	      */
-	
-	      value: function toggleIndex(index, on) {
-	        this.keys[index].flip(on);
-	      }
-	    }
-	  });
-	
-	  return Piano;
-	})(Interface);
-	
-	module.exports = Piano;
-	
-	// loop through and render the keys?
-
-/***/ }),
-/* 24 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	"use strict";
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _get = function get(object, property, receiver) { var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { return get(parent, property, receiver); } } else if ("value" in desc && desc.writable) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } };
-	
-	var _inherits = function (subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) subClass.__proto__ = superClass; };
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var svg = __webpack_require__(4);
-	var dom = __webpack_require__(7);
-	var Interface = __webpack_require__(6);
-	var ButtonTemplate = __webpack_require__(17);
-	var MatrixModel = __webpack_require__(25);
-	var CounterModel = __webpack_require__(28);
-	var touch = __webpack_require__(9);
-	
-	var MatrixCell = (function (_ButtonTemplate) {
-	  function MatrixCell() {
-	    _classCallCheck(this, MatrixCell);
-	
-	    var options = ["value"];
-	
-	    var defaults = {
-	      size: [80, 80],
-	      target: false,
-	      mode: "toggle",
-	      value: 0
-	    };
-	
-	    _get(Object.getPrototypeOf(MatrixCell.prototype), "constructor", this).call(this, arguments, options, defaults);
-	
-	    this.index = this.settings.index;
-	    this.row = this.settings.row;
-	    this.column = this.settings.column;
-	
-	    this.matrix = this.settings.matrix;
-	
-	    this.interacting = false;
-	    this.paintbrush = false;
-	
-	    this.init();
-	    this.render();
-	  }
-	
-	  _inherits(MatrixCell, _ButtonTemplate);
-	
-	  _createClass(MatrixCell, {
-	    buildFrame: {
-	      value: function buildFrame() {
-	        this.element = svg.create("svg");
-	        this.element.setAttribute("width", this.width);
-	        this.element.setAttribute("height", this.height);
-	        this.element.style.top = "0px";
-	        this.element.style.left = "0px";
-	        this.element.style.position = "absolute";
-	        this.parent.appendChild(this.element);
-	      }
-	    },
-	    buildInterface: {
-	      value: function buildInterface() {
-	        var _this = this;
-	
-	        this.pad = svg.create("rect");
-	        this.element.appendChild(this.pad);
-	
-	        this.interactionTarget = this.pad;
-	
-	        /* events */
-	
-	        if (!touch.exists) {
-	
-	          this.click = function () {
-	            _this.matrix.interacting = true;
-	            _this.matrix.paintbrush = !_this.state;
-	            _this.down(_this.matrix.paintbrush);
-	          };
-	          this.pad.addEventListener("mouseover", function () {
-	            if (_this.matrix.interacting) {
-	              _this.down(_this.matrix.paintbrush);
-	            }
-	          });
-	
-	          this.move = function () {};
-	          this.pad.addEventListener("mousemove", function (e) {
-	            if (_this.matrix.interacting) {
-	              if (!_this.offset) {
-	                _this.offset = dom.findPosition(_this.element);
-	              }
-	              _this.mouse = dom.locateMouse(e, _this.offset);
-	              _this.bend();
-	            }
-	          });
-	
-	          this.release = function () {
-	            _this.matrix.interacting = false;
-	          };
-	          this.pad.addEventListener("mouseup", function () {
-	            if (_this.matrix.interacting) {
-	              _this.up();
-	            }
-	          });
-	          this.pad.addEventListener("mouseout", function () {
-	            if (_this.matrix.interacting) {
-	              _this.up();
-	            }
-	          });
-	        }
-	      }
-	    },
-	    sizeInterface: {
-	      value: function sizeInterface() {
-	
-	        this.pad.setAttribute("x", 1);
-	        this.pad.setAttribute("y", 1);
-	        if (this.width > 2) {
-	          this.pad.setAttribute("width", this.width - 2);
-	        } else {
-	          this.pad.setAttribute("width", this.width);
-	        }
-	        if (this.height > 2) {
-	          this.pad.setAttribute("height", this.height - 2);
-	        } else {
-	          this.pad.setAttribute("height", this.height);
-	        }
-	        //this.pad.setAttribute('height', this.height - 2);
-	        this.pad.setAttribute("fill", this.matrix.colors.fill);
-	      }
-	    },
-	    render: {
-	      value: function render() {
-	        if (!this.state) {
-	          this.pad.setAttribute("fill", this.matrix.colors.fill);
-	        } else {
-	          this.pad.setAttribute("fill", this.matrix.colors.accent);
-	        }
-	      }
-	    }
-	  });
-	
-	  return MatrixCell;
-	})(ButtonTemplate);
-	
-	/**
-	* Sequencer
-	*
-	* @description Grid of buttons with built-in step sequencer.
-	*
-	* @demo <div nexus-ui="sequencer" style="width:400px;height:200px;"></div>
-	*
-	* @example
-	* var sequencer = new Nexus.Sequencer('#target')
-	*
-	* @example
-	* var sequencer = new Nexus.Sequencer('#target',{
-	*  'size': [400,200],
-	*  'mode': 'toggle',
-	*  'rows': 5,
-	*  'columns': 10
-	*})
-	*
-	* @output
-	* change
-	* Fires any time the interface's matrix changes. <br>
-	* The event data is an object containing <i>row</i> (number), <i>column</i> (number), and <i>state</i> (boolean) properties.
-	*
-	* @outputexample
-	* sequencer.on('change',function(v) {
-	*   console.log(v);
-	* })
-	*
-	* @output
-	* step
-	* Fires any time the sequencer steps to the next column, in sequece mode. <br>
-	* The event data is an <i>array</i> containing all values in the column, <i>bottom row first</i>.
-	*
-	* @outputexample
-	* sequencer.on('step',function(v) {
-	*   console.log(v);
-	* })
-	*/
-	
-	var Sequencer = (function (_Interface) {
-	  function Sequencer() {
-	    _classCallCheck(this, Sequencer);
-	
-	    var options = ["value"];
-	
-	    var defaults = {
-	      size: [400, 200],
-	      mode: "toggle",
-	      rows: 5,
-	      columns: 10
-	    };
-	
-	    _get(Object.getPrototypeOf(Sequencer.prototype), "constructor", this).call(this, arguments, options, defaults);
-	
-	    this.active = -1;
-	
-	    /**
-	    * Button interaction mode: see Button
-	    * @type {string}
-	    * @example button.mode = 'toggle';
-	    */
-	    this.mode = this.settings.mode;
-	
-	    /**
-	    * The interval object which controls timing and sequence scheduling.
-	    * @type {interval}
-	    */
-	    this.interval = new Nexus.Interval(200, function () {}, false); // jshint ignore:line
-	
-	    /**
-	    * A Matrix model containing methods for manipulating the sequencer's array of values. To learn how to manipulate the matrix, read about the matrix model.
-	    * @type {matrix}
-	    */
-	    this.matrix = new MatrixModel(this.settings.rows, this.settings.columns);
-	    this.matrix.ui = this;
-	
-	    /**
-	    * A Counter model which the sequencer steps through. For example, you could use this model to step through the sequencer in reverse, randomly, or in a drunk walk.
-	    * @type {counter}
-	    */
-	    this.stepper = new CounterModel(0, this.columns);
-	
-	    this.init();
-	  }
-	
-	  _inherits(Sequencer, _Interface);
-	
-	  _createClass(Sequencer, {
-	    buildFrame: {
-	      value: function buildFrame() {
-	        this.element = document.createElement("div");
-	        this.element.style.position = "relative";
-	        this.element.style.display = "block";
-	        this.element.style.width = "100%";
-	        this.element.style.height = "100%";
-	        this.parent.appendChild(this.element);
-	        if (touch.exists) {
-	          this.addTouchListeners();
-	        }
-	      }
-	    },
-	    buildInterface: {
-	      value: function buildInterface() {
-	
-	        this.cells = [];
-	        for (var i = 0; i < this.matrix.length; i++) {
-	
-	          var _location = this.matrix.locate(i);
-	          // returns {row,col}
-	
-	          var container = document.createElement("span");
-	          container.style.position = "absolute";
-	
-	          var cell = new MatrixCell(container, {
-	            component: true,
-	            index: i,
-	            row: _location.row,
-	            column: _location.column,
-	            mode: this.mode,
-	            matrix: this
-	          }, this.keyChange.bind(this, i));
-	
-	          //  cell.matrix = this;
-	          if (touch.exists) {
-	            cell.pad.index = i;
-	            cell.preClick = cell.preMove = cell.preRelease = function () {};
-	            cell.click = cell.move = cell.release = function () {};
-	            cell.preTouch = cell.preTouchMove = cell.preTouchRelease = function () {};
-	            cell.touch = cell.touchMove = cell.touchRelease = function () {};
-	          }
-	
-	          this.cells.push(cell);
-	          this.element.appendChild(container);
-	        }
-	        this.sizeInterface();
-	      }
-	    },
-	    sizeInterface: {
-	      value: function sizeInterface() {
-	
-	        var cellWidth = this.width / this.columns;
-	        var cellHeight = this.height / this.rows;
-	
-	        for (var i = 0; i < this.cells.length; i++) {
-	          var container = this.cells[i].parent;
-	          container.style.left = this.cells[i].column * cellWidth + "px";
-	          container.style.top = this.cells[i].row * cellHeight + "px";
-	          this.cells[i].resize(cellWidth, cellHeight);
-	        }
-	      }
-	    },
-	    colorInterface: {
-	      value: function colorInterface() {
-	        for (var i = 0; i < this.cells.length; i++) {
-	          this.cells[i].render();
-	        }
-	      }
-	    },
-	    update: {
-	      value: function update() {
-	        var _this = this;
-	
-	        //  console.log("updating...")
-	        //on = on || false;
-	        this.matrix.iterate(function (r, c, i) {
-	          //  console.log(this.matrix.pattern[r][c], this.cells[i].state);
-	          if (_this.matrix.pattern[r][c] !== _this.cells[i].state) {
-	            if (_this.matrix.pattern[r][c] > 0) {
-	              _this.cells[i].turnOn();
-	            } else {
-	              _this.cells[i].turnOff();
-	            }
-	          }
-	        });
-	      }
-	    },
-	    keyChange: {
-	
-	      // update => cell.turnOn => cell.emit => keyChange (seq.emit) => matrix.set.cell => update
-	      //
-	      // interaction => keyChange => matrix.set.cell => update => cell.turnOn
-	      //                                             => emit
-	      //
-	      // set.cell => update => needs to emit.
-	
-	      value: function keyChange(note, on) {
-	        // emit data for any key turning on/off
-	        // i is the note index
-	        // v is whether it is on or off
-	        var cell = this.matrix.locate(note);
-	        //  this.matrix.set.cell(cell.column,cell.row,on);
-	        this.matrix.pattern[cell.row][cell.column] = on;
-	        var data = {
-	          row: cell.row,
-	          column: cell.column,
-	          state: on
-	        };
-	        this.emit("change", data);
-	      }
-	    },
-	    render: {
-	      value: function render() {
-	        var _this = this;
-	
-	        if (this.stepper.value >= 0) {
-	          this.matrix.iterate(function (r, c, i) {
-	            if (c === _this.stepper.value) {
-	              _this.cells[i].pad.setAttribute("stroke", _this.colors.mediumLight);
-	              _this.cells[i].pad.setAttribute("stroke-width", "1");
-	              _this.cells[i].pad.setAttribute("stroke-opacity", "1");
-	            } else {
-	              _this.cells[i].pad.setAttribute("stroke", "none");
-	            }
-	          });
-	        }
-	      }
-	    },
-	    start: {
-	
-	      /**
-	       * Start sequencing
-	       * @param  {number} ms Beat tempo in milliseconds
-	       */
-	
-	      value: function start(ms) {
-	        this.interval.event = this.next.bind(this);
-	        if (ms) {
-	          this.interval.ms(ms);
-	        }
-	        this.interval.start();
-	      }
-	    },
-	    stop: {
-	
-	      /**
-	      Stop sequencing
-	      */
-	
-	      value: function stop() {
-	        this.interval.stop();
-	      }
-	    },
-	    next: {
-	
-	      /**
-	      Manually jump to the next column and trigger the 'change' event. The "next" column is determined by your mode of sequencing.
-	      */
-	
-	      value: function next() {
-	        this.stepper.next();
-	        this.emit("step", this.matrix.column(this.stepper.value).reverse());
-	        this.render();
-	      }
-	    },
-	    addTouchListeners: {
-	      value: function addTouchListeners() {
-	        var _this = this;
-	
-	        this.preClick = this.preMove = this.preRelease = function () {};
-	        this.click = this.move = this.release = function () {};
-	        this.preTouch = this.preTouchMove = this.preTouchRelease = function () {};
-	        this.touch = this.touchMove = this.touchRelease = function () {};
-	
-	        this.currentElement = false;
-	
-	        this.element.addEventListener("touchstart", function (e) {
-	          var element = document.elementFromPoint(e.targetTouches[0].clientX, e.targetTouches[0].clientY);
-	          var cell = _this.cells[element.index];
-	          _this.paintbrush = !cell.state;
-	          cell.down(_this.paintbrush);
-	          _this.currentElement = element.index;
-	          e.preventDefault();
-	          e.stopPropagation();
-	        });
-	
-	        this.element.addEventListener("touchmove", function (e) {
-	          var element = document.elementFromPoint(e.targetTouches[0].clientX, e.targetTouches[0].clientY);
-	          var cell = _this.cells[element.index];
-	          if (element.index !== _this.currentElement) {
-	            if (_this.currentElement >= 0) {
-	              var pastCell = _this.cells[_this.currentElement];
-	              pastCell.up();
-	            }
-	            cell.down(_this.paintbrush);
-	          } else {
-	            cell.bend();
-	          }
-	          _this.currentElement = element.index;
-	          e.preventDefault();
-	          e.stopPropagation();
-	        });
-	
-	        this.element.addEventListener("touchend", function (e) {
-	          // no touches to calculate because none remaining
-	          var cell = _this.cells[_this.currentElement];
-	          cell.up();
-	          _this.interacting = false;
-	          _this.currentElement = false;
-	          e.preventDefault();
-	          e.stopPropagation();
-	        });
-	      }
-	    },
-	    rows: {
-	
-	      /**
-	      Number of rows in the sequencer
-	      @type {number}
-	      */
-	
-	      get: function () {
-	        return this.matrix.rows;
-	      },
-	      set: function (v) {
-	        this.matrix.rows = v;
-	        this.empty();
-	        this.buildInterface();
-	        this.update();
-	      }
-	    },
-	    columns: {
-	
-	      /**
-	      Number of columns in the sequencer
-	      @type {number}
-	      */
-	
-	      get: function () {
-	        return this.matrix.columns;
-	      },
-	      set: function (v) {
-	        this.matrix.columns = v;
-	        this.stepper.max = v;
-	        this.empty();
-	        this.buildInterface();
-	        this.update();
-	      }
-	    }
-	  });
-	
-	  return Sequencer;
-	})(Interface);
-	
-	module.exports = Sequencer;
-
-/***/ }),
-/* 25 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	"use strict";
-	
-	var _interopRequire = function (obj) { return obj && obj.__esModule ? obj["default"] : obj; };
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var math = _interopRequire(__webpack_require__(5));
-	
-	var Sequence = _interopRequire(__webpack_require__(26));
-	
-	// For the tutorial, looking at
-	
-	//Pattern section:
-	// .create(), .rows, .columns,
-	// .pattern, .length, .formatAsText(), .log(),
-	// .locate(i), .indexOf(c,r)
-	// row(), column() (returns contents of row or colum)
-	
-	//Control section:
-	// toggle x3
-	// set x4
-	// rotate x3
-	// populate x3
-	// erase x3
-	
-	// should some version of this have a float value for each cell?
-	// could be like a mirror .pattern that has values. by default, everything is 1, but could be set...
-	// not a good way to do that on interface, but as a model it would be nice...
-	// for .formatAsText(), could multiply by 100 and floor, so each cell is an int from 0 to 9
-	
-	var Matrix = (function () {
-	  function Matrix(rows, columns) {
-	    var _this = this;
-	
-	    _classCallCheck(this, Matrix);
-	
-	    // should also have ability to create using an existing matrix (2d array)
-	    this.pattern = [];
-	    this.create(rows, columns);
-	
-	    this.toggle = {
-	      cell: function (column, row) {
-	        _this.pattern[row][column] = !_this.pattern[row][column]; // math.invert(this.pattern[row][column]);
-	        if (_this.ui) {
-	          _this.ui.update();
-	        }
-	        return _this.pattern[row][column];
-	      },
-	      all: function () {
-	        _this.iterate(function (r, c) {
-	          _this.toggle.cell(c, r);
-	        });
-	        if (_this.ui) {
-	          _this.ui.update();
-	        }
-	      },
-	      row: function (row) {
-	        for (var i = 0; i < _this.columns; i++) {
-	          _this.toggle.cell(i, row);
-	        }
-	        if (_this.ui) {
-	          _this.ui.update();
-	        }
-	      },
-	      column: function (column) {
-	        for (var i = 0; i < _this.rows; i++) {
-	          _this.toggle.cell(column, i);
-	        }
-	        if (_this.ui) {
-	          _this.ui.update();
-	        }
-	      }
-	    };
-	
-	    this.set = {
-	      cell: function (column, row, value) {
-	        _this.pattern[row][column] = value;
-	        if (_this.ui) {
-	          _this.ui.update();
-	        }
-	      },
-	      all: function (values) {
-	        // set the whole matrix using a 2d array as input
-	        // this should also resize the array?
-	        _this.pattern = values;
-	        if (_this.ui) {
-	          _this.ui.update();
-	        }
-	      },
-	      row: function (row, values) {
-	        // set a row using an array as input
-	        _this.pattern[row] = values;
-	        if (_this.ui) {
-	          _this.ui.update();
-	        }
-	      },
-	      column: function (column, values) {
-	        // set a column using an array as input
-	        _this.pattern.forEach(function (row, i) {
-	          _this.pattern[i][column] = values[i];
-	        });
-	        if (_this.ui) {
-	          _this.ui.update();
-	        }
-	      }
-	    };
-	
-	    this.rotate = {
-	      //should eventually do (amountX, amountY) here
-	      // could just use a loop and this.rotate.row(i,amountX);
-	      all: function (amount) {
-	        if (!amount && amount !== 0) {
-	          amount = 1;
-	        }
-	        amount %= _this.pattern[0].length;
-	        if (amount < 0) {
-	          amount = _this.pattern[0].length + amount;
-	        }
-	        for (var i = 0; i < _this.rows; i++) {
-	          var cut = _this.pattern[i].splice(_this.pattern[i].length - amount, amount);
-	          _this.pattern[i] = cut.concat(_this.pattern[i]);
-	        }
-	        if (_this.ui) {
-	          _this.ui.update();
-	        }
-	      },
-	      row: function (row, amount) {
-	        if (!amount && amount !== 0) {
-	          amount = 1;
-	        }
-	        amount %= _this.pattern[0].length;
-	        if (amount < 0) {
-	          amount = _this.pattern[0].length + amount;
-	        }
-	        var cut = _this.pattern[row].splice(_this.pattern[row].length - amount, amount);
-	        _this.pattern[row] = cut.concat(_this.pattern[row]);
-	        if (_this.ui) {
-	          _this.ui.update();
-	        }
-	      },
-	      column: function (column, amount) {
-	        if (!amount && amount !== 0) {
-	          amount = 1;
-	        }
-	        amount %= _this.pattern.length;
-	        if (amount < 0) {
-	          amount = _this.pattern.length + amount;
-	        }
-	        var proxy = [];
-	        _this.pattern.forEach(function (row) {
-	          proxy.push(row[column]);
-	        });
-	        var cut = proxy.splice(proxy.length - amount, amount);
-	        proxy = cut.concat(proxy);
-	        _this.pattern.forEach(function (row, i) {
-	          row[column] = proxy[i];
-	        });
-	        if (_this.ui) {
-	          _this.ui.update();
-	        }
-	      }
-	    };
-	
-	    // the idea behind populate is to be able to set a whole row or column to 0 or 1
-	    // IF the value is a float, such as 0.7, then it would become a probability
-	    // so populate(0.7) would give each cell a 70% chance of being 1
-	    this.populate = {
-	      all: function (odds) {
-	        var oddsSequence = new Sequence(odds);
-	        _this.iterate(function (r, c) {
-	          _this.pattern[r][c] = math.coin(oddsSequence.next());
-	        });
-	        // This could be used so that each row has same odds pattern, even if row length is not divisibly by sequence length.
-	        //,() => {
-	        //  odds.pos = -1;
-	        // }
-	        if (_this.ui) {
-	          _this.ui.update();
-	        }
-	      },
-	      row: function () {
-	        var row = arguments[0] === undefined ? 0 : arguments[0];
-	        var odds = arguments[1] === undefined ? 1 : arguments[1];
-	
-	        var oddsSequence = new Sequence(odds);
-	        _this.pattern[row].forEach(function (cell, i) {
-	          _this.pattern[row][i] = math.coin(oddsSequence.next());
-	        });
-	        if (_this.ui) {
-	          _this.ui.update();
-	        }
-	      },
-	      column: function () {
-	        var column = arguments[0] === undefined ? 0 : arguments[0];
-	        var odds = arguments[1] === undefined ? 1 : arguments[1];
-	
-	        var oddsSequence = new Sequence(odds);
-	        _this.pattern.forEach(function (row, i) {
-	          _this.pattern[i][column] = math.coin(oddsSequence.next());
-	        });
-	        if (_this.ui) {
-	          _this.ui.update();
-	        }
-	      }
-	    };
-	
-	    // essentiall populate(0) so i'm not sure if this is necessary but is nice
-	    this.erase = {
-	      all: function () {
-	        _this.set.all(0);
-	      },
-	      row: function (row) {
-	        _this.set.row(row, 0);
-	      },
-	      column: function (column) {
-	        _this.set.column(column, 0);
-	      }
-	    };
-	
-	    // end constructor
-	  }
-	
-	  _createClass(Matrix, {
-	    create: {
-	      value: function create(rows, columns) {
-	        var _this = this;
-	
-	        this.pattern = [];
-	        for (var row = 0; row < rows; row++) {
-	          var arr = new Array(columns);
-	          this.pattern.push(arr);
-	        }
-	        this.iterate(function (r, c) {
-	          _this.pattern[r][c] = false;
-	        });
-	      }
-	    },
-	    iterate: {
-	      value: function iterate(f, f2) {
-	        var i = 0;
-	        for (var row = 0; row < this.rows; row++) {
-	          if (f2) {
-	            f2(row);
-	          }
-	          for (var column = 0; column < this.columns; column++) {
-	            f(row, column, i);
-	            i++;
-	          }
-	        }
-	      }
-	    },
-	    formatAsText: {
-	      value: function formatAsText() {
-	        var _this = this;
-	
-	        var patternString = "";
-	        this.iterate(function (r, c) {
-	          patternString += (_this.pattern[r][c] ? 1 : 0) + " ";
-	        }, function () {
-	          patternString += "\n";
-	        });
-	        return patternString;
-	      }
-	    },
-	    log: {
-	      value: function log() {
-	        console.log(this.formatAsText());
-	      }
-	    },
-	    update: {
-	      value: function update(pattern) {
-	        this.pattern = pattern || this.pattern;
-	      }
-	    },
-	    length: {
-	      get: function () {
-	        return this.rows * this.columns;
-	      }
-	    },
-	    locate: {
-	      value: function locate(index) {
-	        // returns row and column of cell by index
-	        return {
-	          row: ~ ~(index / this.columns),
-	          column: index % this.columns
-	        };
-	      }
-	    },
-	    indexOf: {
-	      value: function indexOf(row, column) {
-	        return column + row * this.columns;
-	        // returns index of cell by row and column
-	      }
-	    },
-	    row: {
-	      value: (function (_row) {
-	        var _rowWrapper = function row(_x) {
-	          return _row.apply(this, arguments);
-	        };
-	
-	        _rowWrapper.toString = function () {
-	          return _row.toString();
-	        };
-	
-	        return _rowWrapper;
-	      })(function (row) {
-	        var data = [];
-	        for (var i = 0; i < this.columns; i++) {
-	          data.push(this.pattern[row] ? 1 : 0);
-	        }
-	        return data;
-	      })
-	    },
-	    column: {
-	      value: (function (_column) {
-	        var _columnWrapper = function column(_x2) {
-	          return _column.apply(this, arguments);
-	        };
-	
-	        _columnWrapper.toString = function () {
-	          return _column.toString();
-	        };
-	
-	        return _columnWrapper;
-	      })(function (column) {
-	        var data = [];
-	        for (var i = 0; i < this.rows; i++) {
-	          data.push(this.pattern[i][column] ? 1 : 0);
-	        }
-	        return data;
-	      })
-	    },
-	    rows: {
-	      get: function () {
-	        return this.pattern.length;
-	      },
-	      set: function (v) {
-	        var _this = this;
-	
-	        var previous = this.pattern.slice(0);
-	        this.create(v, this.columns);
-	        this.iterate(function (r, c) {
-	          if (previous[r] && previous[r][c]) {
-	            _this.pattern[r][c] = previous[r][c];
-	          }
-	        });
-	      }
-	    },
-	    columns: {
-	      get: function () {
-	        return this.pattern[0].length;
-	      },
-	      set: function (v) {
-	        var _this = this;
-	
-	        var previous = this.pattern.slice(0);
-	        this.create(this.rows, v);
-	        this.iterate(function (r, c) {
-	          if (previous[r] && previous[r][c]) {
-	            _this.pattern[r][c] = previous[r][c];
-	          }
-	        });
-	      }
-	    }
-	  });
-	
-	  return Matrix;
-	})();
-	
-	module.exports = Matrix;
-
-/***/ }),
-/* 26 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	"use strict";
-	
-	var _interopRequire = function (obj) { return obj && obj.__esModule ? obj["default"] : obj; };
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var math = _interopRequire(__webpack_require__(5));
-	
-	var Drunk = _interopRequire(__webpack_require__(27));
-	
-	var Sequence = (function () {
-	  function Sequence() {
-	    var sequence = arguments[0] === undefined ? [0, 10, 20, 30] : arguments[0];
-	    var mode = arguments[1] === undefined ? "up" : arguments[1];
-	    var position = arguments[2] === undefined ? false : arguments[2];
-	
-	    _classCallCheck(this, Sequence);
-	
-	    this.values = sequence;
-	    if (!Array.isArray(this.values)) {
-	      this.values = [this.values];
-	    }
-	    this._mode = mode;
-	    this.position = position;
-	
-	    this.drunkWalk = new Drunk(0, this.values.length - 1);
-	
-	    this.startValues = {
-	      up: 0,
-	      down: this.values.length - 1,
-	      drunk: ~ ~(this.values.length / 2),
-	      random: math.ri(this.values.length)
-	    };
-	
-	    if (this.position !== false) {
-	      this.next = this[this._mode];
-	    } else {
-	      this.next = this.first;
-	    }
-	  }
-	
-	  _createClass(Sequence, {
-	    mode: {
-	      get: function () {
-	        return this._mode;
-	      },
-	      set: function (mode) {
-	        if (!(mode === "up" || mode === "down" || mode === "random" || mode === "drunk")) {
-	          console.error("The only modes currently allowed are: up, down, random, drunk");
-	          return;
-	        }
-	        this._mode = mode;
-	        if (this.position) {
-	          this.next = this[this._mode];
-	        }
-	      }
-	    },
-	    value: {
-	      get: function () {
-	        return this.values[this.position];
-	      },
-	      set: function (v) {
-	        this.position = this.values.indexOf(v);
-	      }
-	    },
-	    first: {
-	      value: function first() {
-	        if (this.position !== false) {
-	          this.next = this[this._mode];
-	          return this.next();
-	        }
-	        this.position = this.startValues[this._mode];
-	        this.next = this[this._mode];
-	        return this.value;
-	      }
-	    },
-	    up: {
-	      value: function up() {
-	        this.position++;
-	        this.position %= this.values.length;
-	        return this.value;
-	      }
-	    },
-	    down: {
-	      value: function down() {
-	        this.position--;
-	        if (this.position < 0) {
-	          this.position = (this.position + this.values.length) % this.values.length;
-	        }
-	        return this.value;
-	      }
-	    },
-	    random: {
-	      value: function random() {
-	        this.position = math.ri(0, this.values.length);
-	        return this.value;
-	      }
-	    },
-	    drunk: {
-	      value: function drunk() {
-	        this.drunkWalk.max = this.values.length;
-	        this.drunkWalk.value = this.position;
-	        this.position = this.drunkWalk.next();
-	        return this.value;
-	      }
-	
-	      /* future methods
-	      .group(start,stop) -- outputs a group of n items from the list, with wrapping
-	      .loop(start,stop) -- confines sequencing to a subset of the values
-	          (could even have a distinction between .originalValues and the array of values being used)
-	      */
-	
-	    }
-	  });
-	
-	  return Sequence;
-	})();
-	
-	module.exports = Sequence;
-
-/***/ }),
-/* 27 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	"use strict";
-	
-	var _interopRequire = function (obj) { return obj && obj.__esModule ? obj["default"] : obj; };
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var math = _interopRequire(__webpack_require__(5));
-	
-	var Drunk = (function () {
-	    function Drunk() {
-	        var min = arguments[0] === undefined ? 0 : arguments[0];
-	        var max = arguments[1] === undefined ? 9 : arguments[1];
-	        var value = arguments[2] === undefined ? 0 : arguments[2];
-	        var increment = arguments[3] === undefined ? 1 : arguments[3];
-	        var loop = arguments[4] === undefined ? false : arguments[4];
-	
-	        _classCallCheck(this, Drunk);
-	
-	        this.min = min;
-	        this.max = max;
-	        this.value = value;
-	        this.increment = increment;
-	        this.loop = loop;
-	    }
-	
-	    _createClass(Drunk, {
-	        next: {
-	            value: function next() {
-	                this.value += math.pick(-1 * this.increment, this.increment);
-	                if (this.value > this.max) {
-	                    if (this.loop) {
-	                        this.value = this.min;
-	                    } else {
-	                        this.value = this.max - this.increment;
-	                    }
-	                }
-	
-	                if (this.value < this.min) {
-	                    if (this.loop) {
-	                        this.value = this.max;
-	                    } else {
-	                        this.value = this.min + this.increment;
-	                    }
-	                }
-	                return this.value;
-	            }
-	        }
-	    });
-	
-	    return Drunk;
-	})();
-	
-	module.exports = Drunk;
-
-/***/ }),
-/* 28 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	"use strict";
-	
-	var _interopRequire = function (obj) { return obj && obj.__esModule ? obj["default"] : obj; };
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var math = _interopRequire(__webpack_require__(5));
-	
-	var Drunk = _interopRequire(__webpack_require__(27));
-	
-	var Counter = (function () {
-	    function Counter() {
-	        var min = arguments[0] === undefined ? 0 : arguments[0];
-	        var max = arguments[1] === undefined ? 10 : arguments[1];
-	        var mode = arguments[2] === undefined ? "up" : arguments[2];
-	        var value = arguments[3] === undefined ? false : arguments[3];
-	
-	        _classCallCheck(this, Counter);
-	
-	        this.min = min;
-	        this.max = max;
-	        this.value = value;
-	        this.mode = mode;
-	        this.drunkWalk = new Drunk(this.min, this.max);
-	        if (this.value !== false) {
-	            this.next = this[this._mode];
-	        } else {
-	            this.next = this.first;
-	        }
-	    }
-	
-	    _createClass(Counter, {
-	        mode: {
-	            set: function (mode) {
-	                if (!(mode === "up" || mode === "down" || mode === "random" || mode === "drunk")) {
-	                    console.error("The only modes currently allowed are: up, down, random, drunk");
-	                    return;
-	                }
-	                this._mode = mode;
-	                if (this.value) {
-	                    this.next = this[this._mode];
-	                }
-	            },
-	            get: function () {
-	                return this._mode;
-	            }
-	        },
-	        first: {
-	            value: function first() {
-	                if (this.value !== false) {
-	                    this.next = this[this._mode];
-	                    return this.next();
-	                }
-	                this.startValues = {
-	                    up: this.min,
-	                    down: this.max,
-	                    drunk: ~ ~math.average(this.min, this.max),
-	                    random: math.ri(this.min, this.max)
-	                };
-	                this.value = this.startValues[this._mode];
-	                this.next = this[this._mode];
-	                return this.value;
-	            }
-	        },
-	        up: {
-	            value: function up() {
-	                this.value++;
-	                if (this.value >= this.max) {
-	                    this.value = this.min;
-	                }
-	                return this.value;
-	            }
-	        },
-	        down: {
-	            value: function down() {
-	                this.value--;
-	                if (this.value < this.min) {
-	                    this.value = this.max;
-	                }
-	                return this.value;
-	            }
-	        },
-	        random: {
-	            value: function random() {
-	                this.value = math.ri(this.min, this.max);
-	                return this.value;
-	            }
-	        },
-	        drunk: {
-	            value: function drunk() {
-	                this.drunkWalk.min = this.min;
-	                this.drunkWalk.max = this.max;
-	                this.drunkWalk.value = this.value;
-	                this.value = this.drunkWalk.next();
-	                return this.value;
-	            }
-	        }
-	    });
-	
-	    return Counter;
-	})();
-	
-	module.exports = Counter;
-
-/***/ }),
-/* 29 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	"use strict";
-	
-	var _interopRequireWildcard = function (obj) { return obj && obj.__esModule ? obj : { "default": obj }; };
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _get = function get(object, property, receiver) { var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { return get(parent, property, receiver); } } else if ("value" in desc && desc.writable) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } };
-	
-	var _inherits = function (subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) subClass.__proto__ = superClass; };
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var svg = __webpack_require__(4);
-	var math = __webpack_require__(5);
-	var Interface = __webpack_require__(6);
-	var Step = __webpack_require__(11);
-	
-	var Interaction = _interopRequireWildcard(__webpack_require__(12));
-	
-	/**
-	* Pan2D
-	*
-	* @description Interface for moving a sound around an array of speakers. Speaker locations can be customized. The interface calculates the closeness of the sound source to each speaker and returns that distance as a numeric value.
-	*
-	* @demo <span nexus-ui="pan2D"></span>
-	*
-	* @example
-	* var pan2d = new Nexus.Pan2d('#target')
-	*
-	* @example
-	* var pan2d = new Nexus.Pan2D('#target',{
-	*   'size': [200,200],
-	*   'range': 0.5,  // detection radius of each speaker
-	*   'mode': 'absolute',   // 'absolute' or 'relative' sound movement
-	*   'speakers': [  // the speaker [x,y] positions
-	*       [0.5,0.2],
-	*       [0.75,0.25],
-	*       [0.8,0.5],
-	*       [0.75,0.75],
-	*       [0.5,0.8],
-	*       [0.25,0.75]
-	*       [0.2,0.5],
-	*       [0.25,0.25]
-	*   ]
-	* })
-	*
-	* @output
-	* change
-	* Fires any time the "source" node's position changes. <br>
-	* The event data is an array of the amplitudes (0-1), representing the level of each speaker (as calculated by its distance to the audio source).
-	*
-	* @outputexample
-	* pan2d.on('change',function(v) {
-	*   console.log(v);
-	* })
-	*
-	*/
-	
-	var Pan2D = (function (_Interface) {
-	  function Pan2D() {
-	    _classCallCheck(this, Pan2D);
-	
-	    var options = ["range"];
-	
-	    var defaults = {
-	      size: [200, 200],
-	      range: 0.5,
-	      mode: "absolute",
-	      speakers: [[0.5, 0.2], [0.75, 0.25], [0.8, 0.5], [0.75, 0.75], [0.5, 0.8], [0.25, 0.75], [0.2, 0.5], [0.25, 0.25]]
-	    };
-	
-	    _get(Object.getPrototypeOf(Pan2D.prototype), "constructor", this).call(this, arguments, options, defaults);
-	
-	    this.value = {
-	      x: new Step(0, 1, 0, 0.5),
-	      y: new Step(0, 1, 0, 0.5)
-	    };
-	
-	    /**
-	    Absolute or relative mouse interaction. In "absolute" mode, the source node will jump to your mouse position on mouse click. In "relative" mode, it does not.
-	    */
-	    this.mode = this.settings.mode;
-	
-	    this.position = {
-	      x: new Interaction.Handle(this.mode, "horizontal", [0, this.width], [this.height, 0]),
-	      y: new Interaction.Handle(this.mode, "vertical", [0, this.width], [this.height, 0])
-	    };
-	    this.position.x.value = this.value.x.normalized;
-	    this.position.y.value = this.value.y.normalized;
-	
-	    /**
-	    An array of speaker locations. Update this with .moveSpeaker() or .moveAllSpeakers()
-	    */
-	    this.speakers = this.settings.speakers;
-	
-	    /**
-	    Rewrite: The maximum distance from a speaker that the source node can be for it to be heard from that speaker. A low range (0.1) will result in speakers only playing when the sound is very close it. Default is 0.5 (half of the interface).
-	    */
-	    this.range = this.settings.range;
-	
-	    /**
-	    The current levels for each speaker. This is calculated when a source node or speaker node is moved through interaction or programatically.
-	    */
-	    this.levels = [];
-	
-	    this.init();
-	
-	    this.calculateLevels();
-	    this.render();
-	  }
-	
-	  _inherits(Pan2D, _Interface);
-	
-	  _createClass(Pan2D, {
-	    buildInterface: {
-	      value: function buildInterface() {
-	
-	        this.knob = svg.create("circle");
-	
-	        this.element.appendChild(this.knob);
-	
-	        // add speakers
-	        this.speakerElements = [];
-	
-	        for (var i = 0; i < this.speakers.length; i++) {
-	          var speakerElement = svg.create("circle");
-	
-	          this.element.appendChild(speakerElement);
-	
-	          this.speakerElements.push(speakerElement);
-	        }
-	      }
-	    },
-	    sizeInterface: {
-	      value: function sizeInterface() {
-	
-	        this._minDimension = Math.min(this.width, this.height);
-	
-	        this.knobRadius = {
-	          off: ~ ~(this._minDimension / 100) * 3 + 5 };
-	        this.knobRadius.on = this.knobRadius.off * 2;
-	
-	        this.knob.setAttribute("cx", this.width / 2);
-	        this.knob.setAttribute("cy", this.height / 2);
-	        this.knob.setAttribute("r", this.knobRadius.off);
-	
-	        for (var i = 0; i < this.speakers.length; i++) {
-	          var speakerElement = this.speakerElements[i];
-	          var speaker = this.speakers[i];
-	          speakerElement.setAttribute("cx", speaker[0] * this.width);
-	          speakerElement.setAttribute("cy", speaker[1] * this.height);
-	          speakerElement.setAttribute("r", this._minDimension / 20 + 5);
-	          speakerElement.setAttribute("fill-opacity", "0");
-	        }
-	
-	        this.position.x.resize([0, this.width], [this.height, 0]);
-	        this.position.y.resize([0, this.width], [this.height, 0]);
-	
-	        // next, need to
-	        // resize positions
-	        // calculate speaker distances
-	        this.calculateLevels();
-	        this.render();
-	      }
-	    },
-	    colorInterface: {
-	      value: function colorInterface() {
-	
-	        this.element.style.backgroundColor = this.colors.fill;
-	        this.knob.setAttribute("fill", this.colors.mediumLight);
-	
-	        for (var i = 0; i < this.speakers.length; i++) {
-	          var speakerElement = this.speakerElements[i];
-	          speakerElement.setAttribute("fill", this.colors.accent);
-	          speakerElement.setAttribute("stroke", this.colors.accent);
-	        }
-	      }
-	    },
-	    render: {
-	      value: function render() {
-	        this.knobCoordinates = {
-	          x: this.value.x.normalized * this.width,
-	          y: this.height - this.value.y.normalized * this.height
-	        };
-	
-	        this.knob.setAttribute("cx", this.knobCoordinates.x);
-	        this.knob.setAttribute("cy", this.knobCoordinates.y);
-	      }
-	    },
-	    click: {
-	      value: function click() {
-	        this.position.x.anchor = this.mouse;
-	        this.position.y.anchor = this.mouse;
-	        this.move();
-	      }
-	    },
-	    move: {
-	      value: function move() {
-	        if (this.clicked) {
-	          this.position.x.update(this.mouse);
-	          this.position.y.update(this.mouse);
-	          // position.x and position.y are normalized
-	          // so are the levels
-	          // likely don't need this.value at all -- only used for drawing
-	          // not going to be a 'step' or 'min' and 'max' in this one.
-	          this.calculateLevels();
-	          this.emit("change", this.levels);
-	          this.render();
-	        }
-	      }
-	    },
-	    release: {
-	      value: function release() {
-	        this.render();
-	      }
-	    },
-	    normalized: {
-	      get: function () {
-	        return {
-	          x: this.value.x.normalized,
-	          y: this.value.y.normalized
-	        };
-	      }
-	    },
-	    calculateLevels: {
-	      value: function calculateLevels() {
-	        var _this = this;
-	
-	        this.value.x.updateNormal(this.position.x.value);
-	        this.value.y.updateNormal(this.position.y.value);
-	        this.levels = [];
-	        this.speakers.forEach(function (s, i) {
-	          var distance = math.distance(s[0] * _this.width, s[1] * _this.height, _this.position.x.value * _this.width, (1 - _this.position.y.value) * _this.height);
-	          var level = math.clip(1 - distance / (_this.range * _this.width), 0, 1);
-	          _this.levels.push(level);
-	          _this.speakerElements[i].setAttribute("fill-opacity", level);
-	        });
-	      }
-	    },
-	    moveSource: {
-	
-	      /**
-	      Move the audio source node and trigger the output event.
-	      @param x {number} New x location, normalized 0-1
-	      @param y {number} New y location, normalized 0-1
-	      */
-	
-	      value: function moveSource(x, y) {
-	        var location = {
-	          x: x * this.width,
-	          y: y * this.height
-	        };
-	        this.position.x.update(location);
-	        this.position.y.update(location);
-	        this.calculateLevels();
-	        this.emit("change", this.levels);
-	        this.render();
-	      }
-	    },
-	    moveSpeaker: {
-	
-	      /**
-	      Move a speaker node and trigger the output event.
-	      @param index {number} Index of the speaker to move
-	      @param x {number} New x location, normalized 0-1
-	      @param y {number} New y location, normalized 0-1
-	      */
-	
-	      value: function moveSpeaker(index, x, y) {
-	
-	        this.speakers[index] = [x, y];
-	        this.speakerElements[index].setAttribute("cx", x * this.width);
-	        this.speakerElements[index].setAttribute("cy", y * this.height);
-	        this.calculateLevels();
-	        this.emit("change", this.levels);
-	        this.render();
-	      }
-	
-	      /**
-	      Set all speaker locations
-	      @param locations {Array} Array of speaker locations. Each item in the array should be an array of normalized x and y coordinates.
-	       setSpeakers(locations) {
-	       }
-	      */
-	
-	    }
-	  });
-	
-	  return Pan2D;
-	})(Interface);
-	
-	module.exports = Pan2D;
-
-/***/ }),
-/* 30 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	"use strict";
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _get = function get(object, property, receiver) { var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { return get(parent, property, receiver); } } else if ("value" in desc && desc.writable) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } };
-	
-	var _inherits = function (subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) subClass.__proto__ = superClass; };
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var math = __webpack_require__(5);
-	var svg = __webpack_require__(4);
-	var Interface = __webpack_require__(6);
-	
-	/**
-	* Tilt
-	*
-	* @description Device tilt sensor with 2 or 3 axes (depending on your device and browser).
-	*
-	* @demo <span nexus-ui='tilt'></span>
-	*
-	* @example
-	* var tilt = new Nexus.Tilt('#target')
-	*
-	* @output
-	* change
-	* Fires at a regular interval, as long as this interface is active (see the interface's <i>.active</i> property)<br>
-	* The event data is an <i>object</i> containing x (number) and y (number) properties which represent the current tilt state of the device.
-	*
-	* @outputexample
-	* tilt.on('change',function(v) {
-	*   console.log(v);
-	* })
-	*
-	*
-	*/
-	
-	var Tilt = (function (_Interface) {
-	  function Tilt() {
-	    _classCallCheck(this, Tilt);
-	
-	    var options = ["value"];
-	
-	    var defaults = {
-	      size: [80, 80]
-	    };
-	
-	    _get(Object.getPrototypeOf(Tilt.prototype), "constructor", this).call(this, arguments, options, defaults);
-	
-	    this._active = true;
-	
-	    this.init();
-	
-	    // add event listener for device orientation
-	
-	    this.boundUpdate = this.update.bind(this);
-	    //	this.boundMozTilt = this.mozTilt.bind(this)
-	
-	    if (window.DeviceOrientationEvent) {
-	      this.orientationListener = window.addEventListener("deviceorientation", this.boundUpdate, false);
-	    } else {
-	      this._active = false;
-	      this.colorInterface();
-	    }
-	
-	    /*else if (window.OrientationEvent) {
-	    //	  	window.addEventListener('MozOrientation', this.boundMozTilt, false);
-	    } else {
-	    console.log('Not supported on your device or browser.');
-	    } */
-	  }
-	
-	  _inherits(Tilt, _Interface);
-	
-	  _createClass(Tilt, {
-	    buildInterface: {
-	      value: function buildInterface() {
-	
-	        this.title = svg.create("text");
-	        this.circleX = svg.create("circle");
-	        this.circleY = svg.create("circle");
-	        this.circleZ = svg.create("circle");
-	
-	        this.barX = svg.create("path");
-	        this.barY = svg.create("path");
-	        this.barZ = svg.create("path");
-	
-	        this.barX2 = svg.create("path");
-	        this.barY2 = svg.create("path");
-	        this.barZ2 = svg.create("path");
-	
-	        this.barX.setAttribute("opacity", "0.8");
-	        this.barY.setAttribute("opacity", "0.8");
-	        this.barZ.setAttribute("opacity", "0.8");
-	        this.barX2.setAttribute("opacity", "0.8");
-	        this.barY2.setAttribute("opacity", "0.8");
-	        this.barZ2.setAttribute("opacity", "0.8");
-	
-	        this.circleX.setAttribute("cx", this.width * 3 / 12);
-	        this.circleX.setAttribute("cy", this.height * 3 / 4);
-	        this.circleX.setAttribute("r", this.height / 10);
-	        this.circleX.setAttribute("opacity", "0.4");
-	
-	        this.circleY.setAttribute("cx", this.width * 6 / 12);
-	        this.circleY.setAttribute("cy", this.height * 3 / 4);
-	        this.circleY.setAttribute("r", this.height / 10);
-	        this.circleY.setAttribute("opacity", "0.4");
-	
-	        this.circleZ.setAttribute("cx", this.width * 9 / 12);
-	        this.circleZ.setAttribute("cy", this.height * 3 / 4);
-	        this.circleZ.setAttribute("r", this.height / 10);
-	        this.circleZ.setAttribute("opacity", "0.4");
-	
-	        this.barX.setAttribute("stroke-width", Math.round(this.height / 30));
-	        this.barY.setAttribute("stroke-width", Math.round(this.height / 30));
-	        this.barZ.setAttribute("stroke-width", Math.round(this.height / 30));
-	
-	        this.barX.setAttribute("fill", "none");
-	        this.barY.setAttribute("fill", "none");
-	        this.barZ.setAttribute("fill", "none");
-	
-	        this.barX2.setAttribute("stroke-width", Math.round(this.height / 30));
-	        this.barY2.setAttribute("stroke-width", Math.round(this.height / 30));
-	        this.barZ2.setAttribute("stroke-width", Math.round(this.height / 30));
-	
-	        this.barX2.setAttribute("fill", "none");
-	        this.barY2.setAttribute("fill", "none");
-	        this.barZ2.setAttribute("fill", "none");
-	
-	        this.title.setAttribute("x", this.width / 2);
-	        this.title.setAttribute("y", this.height / 3 + 7);
-	        this.title.setAttribute("font-size", "15px");
-	        this.title.setAttribute("font-weight", "bold");
-	        this.title.setAttribute("letter-spacing", "2px");
-	        this.title.setAttribute("opacity", "0.7");
-	        this.title.setAttribute("text-anchor", "middle");
-	        this.title.textContent = "TILT";
-	
-	        this.element.appendChild(this.circleX);
-	        this.element.appendChild(this.circleY);
-	        this.element.appendChild(this.circleZ);
-	
-	        this.element.appendChild(this.barX);
-	        this.element.appendChild(this.barY);
-	        this.element.appendChild(this.barZ);
-	
-	        this.element.appendChild(this.barX2);
-	        this.element.appendChild(this.barY2);
-	        this.element.appendChild(this.barZ2);
-	
-	        this.element.appendChild(this.title);
-	      }
-	    },
-	    colorInterface: {
-	      value: function colorInterface() {
-	
-	        if (this._active) {
-	          this.element.style.backgroundColor = this.colors.accent;
-	          this.circleX.setAttribute("fill", this.colors.light);
-	          this.circleY.setAttribute("fill", this.colors.light);
-	          this.circleZ.setAttribute("fill", this.colors.light);
-	          this.circleX.setAttribute("stroke", this.colors.light);
-	          this.circleY.setAttribute("stroke", this.colors.light);
-	          this.circleZ.setAttribute("stroke", this.colors.light);
-	          this.barX.setAttribute("stroke", this.colors.light);
-	          this.barY.setAttribute("stroke", this.colors.light);
-	          this.barZ.setAttribute("stroke", this.colors.light);
-	          this.barX2.setAttribute("stroke", this.colors.light);
-	          this.barY2.setAttribute("stroke", this.colors.light);
-	          this.barZ2.setAttribute("stroke", this.colors.light);
-	          this.title.setAttribute("fill", this.colors.light);
-	        } else {
-	          this.element.style.backgroundColor = this.colors.fill;
-	          this.circleX.setAttribute("fill", this.colors.mediumLight);
-	          this.circleY.setAttribute("fill", this.colors.mediumLight);
-	          this.circleZ.setAttribute("fill", this.colors.mediumLight);
-	          this.circleX.setAttribute("stroke", this.colors.mediumLight);
-	          this.circleY.setAttribute("stroke", this.colors.mediumLight);
-	          this.circleZ.setAttribute("stroke", this.colors.mediumLight);
-	          this.barX.setAttribute("stroke", this.colors.mediumLight);
-	          this.barY.setAttribute("stroke", this.colors.mediumLight);
-	          this.barZ.setAttribute("stroke", this.colors.mediumLight);
-	          this.barX2.setAttribute("stroke", this.colors.mediumLight);
-	          this.barY2.setAttribute("stroke", this.colors.mediumLight);
-	          this.barZ2.setAttribute("stroke", this.colors.mediumLight);
-	          this.title.setAttribute("fill", this.colors.mediumLight);
-	        }
-	      }
-	    },
-	    update: {
-	      value: function update(v) {
-	        if (this._active) {
-	
-	          var y = v.beta;
-	          var x = v.gamma;
-	          var z = v.alpha;
-	
-	          // take the original -90 to 90 scale and normalize it 0-1
-	          x = math.scale(x, -90, 90, 0, 1);
-	          y = math.scale(y, -90, 90, 0, 1);
-	          z = math.scale(z, 0, 360, 0, 1);
-	
-	          var handlePoints = {
-	            start: Math.PI * 1.5,
-	            end: math.clip(math.scale(x, 0, 0.5, Math.PI * 1.5, Math.PI * 0.5), Math.PI * 0.5, Math.PI * 1.5)
-	          };
-	          var handle2Points = {
-	            start: Math.PI * 2.5,
-	            end: math.clip(math.scale(x, 0.5, 1, Math.PI * 2.5, Math.PI * 1.5), Math.PI * 1.5, Math.PI * 2.5)
-	          };
-	
-	          var handlePath = svg.arc(this.circleX.cx.baseVal.value, this.circleX.cy.baseVal.value, this.circleX.r.baseVal.value, handlePoints.start, handlePoints.end);
-	          var handle2Path = svg.arc(this.circleX.cx.baseVal.value, this.circleX.cy.baseVal.value, this.circleX.r.baseVal.value, handle2Points.start, handle2Points.end);
-	
-	          this.barX.setAttribute("d", handlePath);
-	          this.barX2.setAttribute("d", handle2Path);
-	
-	          handlePoints = {
-	            start: Math.PI * 1.5,
-	            end: math.clip(math.scale(y, 0, 0.5, Math.PI * 1.5, Math.PI * 0.5), Math.PI * 0.5, Math.PI * 1.5)
-	          };
-	          handle2Points = {
-	            start: Math.PI * 2.5,
-	            end: math.clip(math.scale(y, 0.5, 1, Math.PI * 2.5, Math.PI * 1.5), Math.PI * 1.5, Math.PI * 2.5)
-	          };
-	
-	          handlePath = svg.arc(this.circleY.cx.baseVal.value, this.circleY.cy.baseVal.value, this.circleY.r.baseVal.value, handlePoints.start, handlePoints.end);
-	          handle2Path = svg.arc(this.circleY.cx.baseVal.value, this.circleY.cy.baseVal.value, this.circleY.r.baseVal.value, handle2Points.start, handle2Points.end);
-	
-	          this.barY.setAttribute("d", handlePath);
-	          this.barY2.setAttribute("d", handle2Path);
-	
-	          handlePoints = {
-	            start: Math.PI * 1.5,
-	            end: math.clip(math.scale(z, 0, 0.5, Math.PI * 1.5, Math.PI * 0.5), Math.PI * 0.5, Math.PI * 1.5)
-	          };
-	          handle2Points = {
-	            start: Math.PI * 2.5,
-	            end: math.clip(math.scale(z, 0.5, 1, Math.PI * 2.5, Math.PI * 1.5), Math.PI * 1.5, Math.PI * 2.5)
-	          };
-	
-	          handlePath = svg.arc(this.circleZ.cx.baseVal.value, this.circleZ.cy.baseVal.value, this.circleZ.r.baseVal.value, handlePoints.start, handlePoints.end);
-	          handle2Path = svg.arc(this.circleZ.cx.baseVal.value, this.circleZ.cy.baseVal.value, this.circleZ.r.baseVal.value, handle2Points.start, handle2Points.end);
-	
-	          this.barZ.setAttribute("d", handlePath);
-	          this.barZ2.setAttribute("d", handle2Path);
-	
-	          /*
-	           let pointsX = {
-	            start: 0,
-	            end: math.scale( x, 0, 1, 0, Math.PI*2 )
-	          };
-	          //  console.log(this.circleX.cx.baseVal.value);
-	           let pathX = svg.arc(this.circleX.cx.baseVal.value, this.circleX.cy.baseVal.value, this.circleX.r.baseVal.value*2, pointsX.start, pointsX.end);
-	           this.barX.setAttribute('d',pathX); */
-	
-	          //this.textH.textContent = math.prune(x,2);
-	          //this.textV.textContent = math.prune(y,2);
-	          //
-	          //  this.circleX.setAttribute('opacity',x);
-	          //  this.circleY.setAttribute('opacity',y);
-	          //  this.circleZ.setAttribute('opacity',z);
-	
-	          this.emit("change", {
-	            x: x,
-	            y: y,
-	            z: z
-	          });
-	        }
-	      }
-	    },
-	    click: {
-	      value: function click() {
-	        if (window.DeviceOrientationEvent) {
-	          this.active = !this.active;
-	        }
-	      }
-	    },
-	    active: {
-	
-	      /**
-	      Whether the interface is on (emitting values) or off (paused & not emitting values). Setting this property will update it.
-	      @type {boolean}
-	      */
-	
-	      get: function () {
-	        return this._active;
-	      },
-	      set: function (on) {
-	        this._active = on;
-	        this.colorInterface();
-	      }
-	    },
-	    customDestroy: {
-	      value: function customDestroy() {
-	        window.removeEventListener("deviceorientation", this.boundUpdate, false);
-	      }
-	    }
-	  });
-	
-	  return Tilt;
-	})(Interface);
-	
-	module.exports = Tilt;
-
-/***/ }),
-/* 31 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	"use strict";
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _get = function get(object, property, receiver) { var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { return get(parent, property, receiver); } } else if ("value" in desc && desc.writable) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } };
-	
-	var _inherits = function (subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) subClass.__proto__ = superClass; };
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var math = __webpack_require__(5);
-	var svg = __webpack_require__(4);
-	var Interface = __webpack_require__(6);
-	
-	/**
-	* Multislider
-	*
-	* @description Multislider
-	*
-	* @demo <span nexus-ui="multislider"></span>
-	*
-	* @example
-	* var multislider = new Nexus.Multislider('#target')
-	*
-	* @example
-	* var multislider = new Nexus.Multislider('#target',{
-	*  'size': [200,100],
-	*  'numberOfSliders': 5,
-	*  'min': 0,
-	*  'max': 1,
-	*  'step': 0,
-	*  'candycane': 3,
-	*  'values': [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1],
-	*  'smoothing': 0,
-	*  'mode': 'bar'  // 'bar' or 'line'
-	*})
-	*
-	* @output
-	* change
-	* Fires any time the interface's value changes. <br>
-	* The event data is an object containing <i>index</i> and <i>value</i> properties
-	*
-	* @outputexample
-	* multislider.on('change',function(v) {
-	*   console.log(v);
-	* })
-	*
-	*/
-	
-	var Multislider = (function (_Interface) {
-	  function Multislider() {
-	    _classCallCheck(this, Multislider);
-	
-	    var options = ["value"];
-	
-	    var defaults = {
-	      size: [200, 100],
-	      numberOfSliders: 5,
-	      min: 0,
-	      max: 1,
-	      step: 0,
-	      candycane: 3,
-	      values: [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1],
-	      smoothing: 0,
-	      mode: "bar" // 'bar', 'line'
-	    };
-	
-	    _get(Object.getPrototypeOf(Multislider.prototype), "constructor", this).call(this, arguments, options, defaults);
-	
-	    this._numberOfSliders = this.settings.numberOfSliders;
-	    this._min = this.settings.min;
-	    this._max = this.settings.max;
-	    this._step = this.settings.step;
-	
-	    this._mode = this.settings.mode;
-	
-	    /**
-	    The current values of the slider. NOTE: Use this only to get the current values. Setting this array will not update the multislider. To set the multislider's values, use setSlider() or setAllSliders()
-	    @type {Array}
-	    */
-	    this.values = this.settings.values;
-	
-	    this.candycane = this.settings.candycane;
-	
-	    this.sliderWidth = this.width / this.values.length;
-	
-	    /**
-	    Applies a simple low-pass filter to the multislider as it is interacted with. A smoothing of 0 will be no smoothing. A smoothing of 1 will smooth 1 slider on each side of the interaction. A smoothing of 2 will smooth 2 sliders on each side, and so on.
-	    @type {Number}
-	    */
-	    this.smoothing = this.settings.smoothing;
-	
-	    this.init();
-	    this.render();
-	  }
-	
-	  _inherits(Multislider, _Interface);
-	
-	  _createClass(Multislider, {
-	    buildInterface: {
-	      value: function buildInterface() {
-	
-	        if (this._mode == "line") {
-	
-	          this.line = svg.create("polyline");
-	          this.line.setAttribute("stroke-width", 2);
-	          this.line.setAttribute("fill", "none");
-	
-	          this.element.appendChild(this.line);
-	
-	          this.fill = svg.create("polyline");
-	          this.fill.setAttribute("fill-opacity", "0.2");
-	
-	          this.element.appendChild(this.fill);
-	
-	          this.nodes = [];
-	
-	          this.values.forEach((function (value, index) {
-	
-	            var node = svg.create("circle");
-	
-	            node.setAttribute("cx", this.getX(index));
-	            node.setAttribute("cy", this.getY(value));
-	
-	            this.element.appendChild(node);
-	            this.nodes.push(node);
-	          }).bind(this));
-	        } else {
-	
-	          this.bars = [];
-	          this.caps = [];
-	
-	          this.values.forEach((function (value, index) {
-	
-	            var bar = svg.create("rect");
-	
-	            var x = this.getBarX(index);
-	            var y = this.getY(value);
-	
-	            bar.setAttribute("x", x - 0.1);
-	            bar.setAttribute("y", y);
-	            bar.setAttribute("width", this.sliderWidth + 0.2);
-	            bar.setAttribute("height", this.height);
-	            bar.setAttribute("opacity", 1 - (index % this.candycane + 1) / (this.candycane + 1));
-	
-	            this.element.appendChild(bar);
-	            this.bars.push(bar);
-	
-	            var cap = svg.create("rect");
-	
-	            cap.setAttribute("x", x - 0.1);
-	            cap.setAttribute("y", y);
-	            cap.setAttribute("width", this.sliderWidth + 0.2);
-	            cap.setAttribute("height", 5);
-	
-	            this.element.appendChild(cap);
-	            this.caps.push(cap);
-	          }).bind(this));
-	        }
-	      }
-	    },
-	    getBarX: {
-	      value: function getBarX(index) {
-	        return this.getX(index) - this.sliderWidth / 2;
-	      }
-	    },
-	    getX: {
-	      value: function getX(index) {
-	        //return Math.floor( index * this.sliderWidth + this.sliderWidth/2 );
-	        return index * this.sliderWidth + this.sliderWidth / 2;
-	      }
-	    },
-	    getY: {
-	      value: function getY(value) {
-	        return math.scale(value, this._min, this._max, this.height, 0); //(1 - value) * this.height;
-	      }
-	    },
-	    getValueFromY: {
-	      value: function getValueFromY(y) {
-	        var scaleAdjusted = math.scale(y, this.height, 0, this._min, this._max);
-	        return this.adjustValueToStep(scaleAdjusted);
-	      }
-	    },
-	    getIndexFromX: {
-	      value: function getIndexFromX(x) {
-	        return math.clip(Math.floor(x / this.width * this.values.length), 0, this.values.length - 1);
-	      }
-	    },
-	    adjustValueToStep: {
-	      value: function adjustValueToStep(value) {
-	        if (!this._step) {
-	          return value;
-	        }
-	        var offset = value % this._step;
-	        value = value - value % this._step;
-	        if (offset > this._step / 2) {
-	          value += this._step;
-	        }
-	        return value;
-	      }
-	    },
-	    adjustAllValues: {
-	      value: function adjustAllValues() {
-	        this.values.forEach((function (value, index) {
-	          value = this.adjustValueToStep(value);
-	          this.values[index] = math.clip(value, this._min, this._max);
-	        }).bind(this));
-	      }
-	    },
-	    getNormalizedValues: {
-	      value: function getNormalizedValues() {
-	        this.normalizedValues = [];
-	        this.values.forEach((function (value) {
-	          this.normalizedValues.push(math.scale(value, this._min, this._max, 0, 1));
-	        }).bind(this));
-	      }
-	    },
-	    colorInterface: {
-	      value: function colorInterface() {
-	        var _this = this;
-	
-	        this.element.style.backgroundColor = this.colors.fill;
-	
-	        if (this._mode == "line") {
-	          this.line.setAttribute("stroke", this.colors.accent);
-	          this.fill.setAttribute("fill", this.colors.accent);
-	          this.nodes.forEach(function (node) {
-	            node.setAttribute("fill", _this.colors.accent);
-	          });
-	        } else {
-	          this.bars.forEach(function (bar) {
-	            bar.setAttribute("fill", _this.colors.accent);
-	          });
-	          this.caps.forEach(function (cap) {
-	            cap.setAttribute("fill", _this.colors.accent);
-	          });
-	        }
-	      }
-	    },
-	    sizeInterface: {
-	      value: function sizeInterface() {
-	
-	        this.sliderWidth = this.width / this.values.length;
-	
-	        if (this._mode == "line") {
-	          this.nodes.forEach((function (node) {
-	            var r = ~ ~(Math.min(this.width, this.height) / 50) + 2;
-	            r = Math.min(this.sliderWidth, r);
-	            node.setAttribute("r", r);
-	          }).bind(this));
-	        }
-	
-	        this.render();
-	      }
-	    },
-	    render: {
-	      value: function render() {
-	        var _this = this;
-	
-	        if (this._mode == "line") {
-	          (function () {
-	
-	            var data = "0 " + _this.getY(_this.values[0]) + ", ";
-	
-	            _this.values.forEach(function (value, index) {
-	              var x = _this.getX(index);
-	              var y = _this.getY(value);
-	              data += x + " " + y + ", ";
-	              _this.nodes[index].setAttribute("cx", _this.getX(index));
-	              _this.nodes[index].setAttribute("cy", _this.getY(value));
-	            });
-	
-	            data += _this.width + " " + _this.getY(_this.values[_this.values.length - 1]);
-	
-	            _this.line.setAttribute("points", data);
-	
-	            // fill data
-	            // add bottom corners
-	
-	            data += ", " + _this.width + " " + _this.height + ", ";
-	            data += "0 " + _this.height;
-	
-	            _this.fill.setAttribute("points", data);
-	          })();
-	        } else {
-	
-	          this.values.forEach(function (value, index) {
-	            _this.bars[index].setAttribute("y", _this.getY(value));
-	            _this.caps[index].setAttribute("y", _this.getY(value));
-	          });
-	        }
-	      }
-	    },
-	    click: {
-	      value: function click() {
-	        this.hasMoved = false;
-	        this.previousSlider = false;
-	        this.move();
-	      }
-	    },
-	    move: {
-	      value: function move() {
-	        if (this.clicked) {
-	          this.mouse.x = math.clip(this.mouse.x, 0, this.width);
-	          this.mouse.y = math.clip(this.mouse.y, 0, this.height);
-	          this.hasMoved = true;
-	
-	          this.selectedSlider = this.getIndexFromX(this.mouse.x);
-	
-	          this.values[this.selectedSlider] = this.getValueFromY(this.mouse.y);
-	
-	          /* handle interpolation for in-between sliders */
-	
-	          if (this.previousSlider !== false) {
-	            var distance = Math.abs(this.previousSlider - this.selectedSlider);
-	            if (distance > 1) {
-	              var low = Math.min(this.previousSlider, this.selectedSlider);
-	              var high = Math.max(this.previousSlider, this.selectedSlider);
-	              var lowValue = this.values[low];
-	              var highValue = this.values[high];
-	              for (var _i = low; _i < high; _i++) {
-	                this.values[_i] = math.interp((_i - low) / distance, lowValue, highValue);
-	                this.values[_i] = this.adjustValueToStep(this.values[_i]);
-	              }
-	            }
-	          }
-	
-	          if (this.smoothing > 0) {
-	
-	            for (var i = 1; i <= this.smoothing; i++) {
-	              var downCenter = this.selectedSlider - i;
-	              var upCenter = this.selectedSlider + i;
-	
-	              if (downCenter >= 1) {
-	                var downLowerNeighbor = downCenter - 1 >= 0 ? downCenter - 1 : 0;
-	                var downUpperNeighbor = downCenter + 1;
-	                this.values[downCenter] = (this.values[downLowerNeighbor] + this.values[downUpperNeighbor]) / 2;
-	                this.values[downCenter] = this.adjustValueToStep(this.values[downCenter]);
-	              }
-	
-	              if (upCenter < this.values.length - 1) {
-	                var upLowerNeighbor = upCenter - 1;
-	                var upUpperNeighbor = upCenter + 1 < this.values.length ? upCenter + 1 : this.values.length - 1;
-	                this.values[upCenter] = (this.values[upLowerNeighbor] + this.values[upUpperNeighbor]) / 2;
-	                this.values[upCenter] = this.adjustValueToStep(this.values[upCenter]);
-	              }
-	            }
-	          }
-	
-	          this.previousSlider = this.selectedSlider;
-	
-	          this.emit("change", this.values);
-	          this.render();
-	        }
-	      }
-	    },
-	    scan: {
-	
-	      // would be a cool API call to have for later...
-	
-	      value: function scan() {}
-	    },
-	    update: {
-	      value: function update(index, value) {
-	        this.values[index] = this.adjustValueToStep(value);
-	        this.emit("change", {
-	          index: index,
-	          value: value
-	        });
-	      }
-	    },
-	    numberOfSliders: {
-	
-	      /**
-	      Get the number of sliders
-	      @type {Number}
-	      */
-	
-	      get: function () {
-	        return this.values.length;
-	      }
-	    },
-	    min: {
-	
-	      /**
-	      Lower limit of the multislider's output range
-	      @type {number}
-	      @example multislider.min = 1000;
-	      */
-	
-	      get: function () {
-	        return this._min;
-	      },
-	      set: function (v) {
-	        this._min = v;
-	        this.adjustAllValues();
-	        this.render();
-	      }
-	    },
-	    max: {
-	
-	      /**
-	      Upper limit of the multislider's output range
-	      @type {number}
-	      @example multislider.max = 1000;
-	      */
-	
-	      get: function () {
-	        return this._max;
-	      },
-	      set: function (v) {
-	        this._max = v;
-	        this.adjustAllValues();
-	        this.render();
-	      }
-	    },
-	    step: {
-	
-	      /**
-	      The increment that the multislider's value changes by.
-	      @type {number}
-	      @example multislider.step = 5;
-	      */
-	
-	      get: function () {
-	        return this._step;
-	      },
-	      set: function (v) {
-	        this._step = v;
-	        this.adjustAllValues();
-	        this.render();
-	      }
-	    },
-	    setSlider: {
-	
-	      /**
-	      Set the value of an individual slider
-	      @param index {number} Slider index
-	      @param value {number} New slider value
-	      @example
-	      // Set the first slider to value 0.5
-	      multislider.setSlider(0,0.5)
-	      */
-	
-	      value: function setSlider(index, value) {
-	        this.values[index] = this.adjustValueToStep(value);
-	        this.values[index] = math.clip(this.values[index], this._min, this._max);
-	        this.emit("change", {
-	          index: index,
-	          value: value
-	        });
-	      }
-	    },
-	    setAllSliders: {
-	
-	      /**
-	      Set the value of all sliders at once. If the size of the input array does not match the current number of sliders, the value array will repeat until all sliders have been set. I.e. an input array of length 1 will set all sliders to that value.
-	      @param values {Array} All slider values
-	      @example
-	      multislider.setAllSliders([0.2,0.3,0.4,0.5,0.6])
-	      */
-	
-	      value: function setAllSliders(values) {
-	        var previousLength = this.values.length;
-	        var newLength = values.length;
-	        this.values = values;
-	        this.adjustAllValues();
-	        if (previousLength != newLength) {
-	          this.empty();
-	          this.buildInterface();
-	          this.colorInterface();
-	        }
-	        this.sizeInterface();
-	      }
-	    }
-	  });
-	
-	  return Multislider;
-	})(Interface);
-	
-	module.exports = Multislider;
-
-/***/ }),
-/* 32 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	"use strict";
-	
-	var _interopRequireWildcard = function (obj) { return obj && obj.__esModule ? obj : { "default": obj }; };
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _get = function get(object, property, receiver) { var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { return get(parent, property, receiver); } } else if ("value" in desc && desc.writable) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } };
-	
-	var _inherits = function (subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) subClass.__proto__ = superClass; };
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var svg = __webpack_require__(4);
-	var math = __webpack_require__(5);
-	var Interface = __webpack_require__(6);
-	var Step = __webpack_require__(11);
-	
-	var Interaction = _interopRequireWildcard(__webpack_require__(12));
-	
-	/**
-	* Pan
-	*
-	* @description Stereo crossfader.
-	*
-	* @demo <span nexus-ui="pan"></span>
-	*
-	* @example
-	* var pan = new Nexus.Pan('#target')
-	*
-	* @output
-	* change
-	* Fires any time the interface's value changes. <br>
-	* The event data is an object containing the interface's <i>value</i> (-1 to 1), as well as <i>L</i> and <i>R</i> amplitude values (0-1) for left and right speakers, calculated by a square-root crossfade algorithm.
-	*
-	* @outputexample
-	* pan.on('change',function(v) {
-	*   console.log(v);
-	* })
-	*
-	*
-	*/
-	
-	var Pan = (function (_Interface) {
-	  function Pan() {
-	    _classCallCheck(this, Pan);
-	
-	    var options = ["scale", "value"];
-	
-	    var defaults = {
-	      size: [120, 20],
-	      orientation: "horizontal",
-	      mode: "relative",
-	      scale: [-1, 1],
-	      step: 0,
-	      value: 0,
-	      hasKnob: true
-	    };
-	
-	    _get(Object.getPrototypeOf(Pan.prototype), "constructor", this).call(this, arguments, options, defaults);
-	
-	    this.orientation = this.settings.orientation;
-	
-	    this.mode = this.settings.mode;
-	
-	    this.hasKnob = this.settings.hasKnob;
-	
-	    // this.step should eventually be get/set
-	    // updating it will update the _value step model
-	    this.step = this.settings.step; // float
-	
-	    this._value = new Step(this.settings.scale[0], this.settings.scale[1], this.settings.step, this.settings.value);
-	
-	    this.init();
-	
-	    this.position = new Interaction.Handle(this.mode, this.orientation, [0, this.width], [this.height, 0]);
-	    this.position.value = this._value.normalized;
-	
-	    this.value = this._value.value;
-	
-	    this.emit("change", this.value);
-	  }
-	
-	  _inherits(Pan, _Interface);
-	
-	  _createClass(Pan, {
-	    buildInterface: {
-	      value: function buildInterface() {
-	
-	        this.bar = svg.create("rect");
-	        this.knob = svg.create("circle");
-	
-	        this.element.appendChild(this.bar);
-	        this.element.appendChild(this.knob);
-	      }
-	    },
-	    sizeInterface: {
-	      value: function sizeInterface() {
-	
-	        if (this.position) {
-	          this.position.resize([0, this.width], [this.height, 0]);
-	        }
-	
-	        if (this.width < this.height) {
-	          this.orientation = "vertical";
-	        } else {
-	          this.orientation = "horizontal";
-	        }
-	
-	        var x = undefined,
-	            y = undefined,
-	            w = undefined,
-	            h = undefined,
-	            barOffset = undefined,
-	            cornerRadius = undefined;
-	        this.knobData = {
-	          level: 0,
-	          r: 0
-	        };
-	
-	        if (this.orientation === "vertical") {
-	          this.thickness = this.width / 2;
-	          x = this.width / 2;
-	          y = 0;
-	          w = this.thickness;
-	          h = this.height;
-	          this.knobData.r = this.thickness * 0.8;
-	          this.knobData.level = h - this.knobData.r - this.normalized * (h - this.knobData.r * 2);
-	          barOffset = "translate(" + this.thickness * -1 / 2 + ",0)";
-	          cornerRadius = w / 2;
-	        } else {
-	          this.thickness = this.height / 2;
-	          x = 0;
-	          y = this.height / 2;
-	          w = this.width;
-	          h = this.thickness;
-	          this.knobData.r = this.thickness * 0.8;
-	          this.knobData.level = this.normalized * (w - this.knobData.r * 2) + this.knobData.r;
-	          barOffset = "translate(0," + this.thickness * -1 / 2 + ")";
-	          cornerRadius = h / 2;
-	        }
-	
-	        this.bar.setAttribute("x", x);
-	        this.bar.setAttribute("y", y);
-	        this.bar.setAttribute("transform", barOffset);
-	        this.bar.setAttribute("rx", cornerRadius); // corner radius
-	        this.bar.setAttribute("ry", cornerRadius);
-	        this.bar.setAttribute("width", w);
-	        this.bar.setAttribute("height", h);
-	
-	        if (this.orientation === "vertical") {
-	          this.knob.setAttribute("cx", x);
-	          this.knob.setAttribute("cy", this.knobData.level);
-	        } else {
-	          this.knob.setAttribute("cx", this.knobData.level);
-	          this.knob.setAttribute("cy", y);
-	        }
-	        this.knob.setAttribute("r", this.knobData.r);
-	      }
-	    },
-	    colorInterface: {
-	      value: function colorInterface() {
-	
-	        this.bar.setAttribute("fill", this.colors.fill);
-	        this.knob.setAttribute("fill", this.colors.accent);
-	
-	        if (!this.hasKnob) {
-	          this.knob.setAttribute("fill", "transparent");
-	        }
-	      }
-	    },
-	    render: {
-	      value: function render() {
-	        if (!this.clicked) {
-	          this.knobData.r = this.thickness * 0.75;
-	        }
-	        this.knob.setAttribute("r", this.knobData.r);
-	
-	        if (this.orientation === "vertical") {
-	          this.knobData.level = this.knobData.r + this._value.normalized * (this.height - this.knobData.r * 2);
-	          this.knob.setAttribute("cy", this.height - this.knobData.level);
-	        } else {
-	          this.knobData.level = this._value.normalized * (this.width - this.knobData.r * 2) + this.knobData.r;
-	          this.knob.setAttribute("cx", this.knobData.level);
-	        }
-	      }
-	    },
-	    click: {
-	      value: function click() {
-	        this.knobData.r = this.thickness * 0.9;
-	        this.position.anchor = this.mouse;
-	        this.move();
-	      }
-	    },
-	    move: {
-	      value: function move() {
-	        if (this.clicked) {
-	          this.position.update(this.mouse);
-	
-	          this.value = this._value.updateNormal(this.position.value);
-	
-	          this.emit("change", {
-	            value: this.value,
-	            L: Math.pow(math.scale(this.value, -1, 1, 1, 0), 2),
-	            R: Math.pow(math.scale(this.value, -1, 1, 0, 1), 2)
-	          });
-	        }
-	      }
-	    },
-	    release: {
-	      value: function release() {
-	        this.render();
-	      }
-	    },
-	    value: {
-	
-	      /**
-	      The position of crossfader, from -1 (left) to 1 (right). Setting this value updates the interface and triggers the output event.
-	      @type {number}
-	      */
-	
-	      get: function () {
-	        return this._value.value;
-	      },
-	      set: function (value) {
-	        this._value.update(value);
-	        this.position.value = this._value.normalized;
-	        this.emit("change", {
-	          value: this.value,
-	          L: Math.pow(math.scale(this.value, -1, 1, 1, 0), 2),
-	          R: Math.pow(math.scale(this.value, -1, 1, 0, 1), 2)
-	        });
-	        this.render();
-	      }
-	    },
-	    normalized: {
-	      get: function () {
-	        return this._value.normalized;
-	      }
-	    }
-	  });
-	
-	  return Pan;
-	})(Interface);
-	
-	module.exports = Pan;
-
-/***/ }),
-/* 33 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	"use strict";
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _get = function get(object, property, receiver) { var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { return get(parent, property, receiver); } } else if ("value" in desc && desc.writable) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } };
-	
-	var _inherits = function (subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) subClass.__proto__ = superClass; };
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var math = __webpack_require__(5);
-	var svg = __webpack_require__(4);
-	var Interface = __webpack_require__(6);
-	
-	var Point = function Point(point, envelope) {
-	
-	  this.x = point.x;
-	  this.y = point.y;
-	
-	  this.xMin = point.xMin || 0;
-	  this.xMax = point.xMax || 1;
-	  this.yMin = point.yMin || 0;
-	  this.yMax = point.yMax || 1;
-	
-	  this.envelope = envelope;
-	
-	  this.element = svg.create("circle");
-	  this.element.setAttribute("fill", this.envelope.colors.accent);
-	
-	  this.envelope.element.appendChild(this.element);
-	
-	  this.resize = function () {
-	    var r = ~ ~(Math.min(this.envelope.width, this.envelope.height) / 50) + 2;
-	    this.element.setAttribute("r", r);
-	  };
-	
-	  this.move = function (x, y) {
-	
-	    this.x = x || x === 0 ? x : this.x;
-	    this.y = y || y === 0 ? y : this.y;
-	
-	    if (this.envelope.nodes.indexOf(this) >= 0) {
-	
-	      var prevIndex = this.envelope.nodes.indexOf(this) - 1;
-	      var nextIndex = this.envelope.nodes.indexOf(this) + 1;
-	
-	      var prevNode = this.envelope.nodes[prevIndex];
-	      var nextNode = this.envelope.nodes[nextIndex];
-	
-	      var lowX = prevIndex >= 0 ? prevNode.x : 0;
-	      lowX = lowX < this.xMin ? this.xMin : lowX;
-	
-	      var highX = nextIndex < this.envelope.nodes.length ? nextNode.x : 1;
-	      highX = highX > this.xMax ? this.xMax : highX;
-	
-	      if (this.x < lowX) {
-	        this.x = lowX;
-	      }
-	      if (this.x > highX) {
-	        this.x = highX;
-	      }
-	
-	      if (this.y < this.yMin) {
-	        this.y = this.yMin;
-	      }
-	      if (this.y > this.yMax) {
-	        this.y = this.yMax;
-	      }
-	    }
-	
-	    this.location = this.getCoordinates();
-	    this.element.setAttribute("cx", this.location.x);
-	    this.element.setAttribute("cy", this.location.y);
-	  };
-	
-	  this.getCoordinates = function () {
-	    return {
-	      x: this.x * this.envelope.width,
-	      y: (1 - this.y) * this.envelope.height
-	    };
-	  };
-	
-	  this.move(this.x, this.y, true);
-	  this.resize();
-	
-	  this.destroy = function () {
-	    this.envelope.element.removeChild(this.element);
-	    this.envelope.nodes.splice(this.envelope.nodes.indexOf(this), 1);
-	  };
-	};
-	
-	/**
-	* Envelope
-	*
-	* @description Interactive linear ramp visualization.
-	*
-	* @demo <span nexus-ui="envelope"></span>
-	*
-	* @example
-	* var envelope = new Nexus.Envelope('#target')
-	*
-	* @example
-	* var envelope = new Nexus.Envelope('#target',{
-	*   'size': [300,150],
-	*   'noNewPoints': false,
-	*   'points': [
-	*     {
-	*       x: 0.1,
-	*       y: 0.4
-	*     },
-	*     {
-	*       x: 0.35,
-	*       y: 0.6
-	*     },
-	*     {
-	*       x: 0.65,
-	*       y: 0.2
-	*     },
-	*     {
-	*       x: 0.9,
-	*       y: 0.4
-	*     },
-	*   ]
-	* })
-	*
-	* @output
-	* change
-	* Fires any time a node is moved. <br>
-	* The event data is an array of point locations. Each item in the array is an object containing <i>x</i> and <i>y</i> properties describing the location of a point on the envelope.
-	*
-	* @outputexample
-	* envelope.on('change',function(v) {
-	*   console.log(v);
-	* })
-	*
-	*/
-	
-	var Envelope = (function (_Interface) {
-	  function Envelope() {
-	    _classCallCheck(this, Envelope);
-	
-	    var options = ["value"];
-	
-	    var defaults = {
-	      size: [300, 150],
-	      noNewPoints: false,
-	      points: [{
-	        x: 0.1,
-	        y: 0.4
-	      }, {
-	        x: 0.35,
-	        y: 0.6
-	      }, {
-	        x: 0.65,
-	        y: 0.2
-	      }, {
-	        x: 0.9,
-	        y: 0.4
-	      }]
-	    };
-	
-	    _get(Object.getPrototypeOf(Envelope.prototype), "constructor", this).call(this, arguments, options, defaults);
-	
-	    this.points = this.settings.points;
-	
-	    this.nodes = [];
-	
-	    this.selected = false;
-	
-	    this.init();
-	  }
-	
-	  _inherits(Envelope, _Interface);
-	
-	  _createClass(Envelope, {
-	    buildInterface: {
-	      value: function buildInterface() {
-	        var _this = this;
-	
-	        this.points.forEach(function (point) {
-	          var node = new Point(point, _this);
-	          _this.nodes.push(node);
-	        });
-	
-	        this.sortPoints();
-	
-	        this.line = svg.create("polyline");
-	        this.line.setAttribute("stroke-width", 2);
-	        this.line.setAttribute("fill", "none");
-	
-	        this.element.appendChild(this.line);
-	
-	        this.fill = svg.create("polyline");
-	        this.fill.setAttribute("fill-opacity", "0.2");
-	
-	        this.element.appendChild(this.fill);
-	      }
-	    },
-	    sizeInterface: {
-	      value: function sizeInterface() {
-	
-	        for (var i = 0; i < this.nodes.length; i++) {
-	          this.nodes[i].resize();
-	          this.nodes[i].move();
-	        }
-	
-	        this.render();
-	      }
-	    },
-	    colorInterface: {
-	      value: function colorInterface() {
-	        var _this = this;
-	
-	        this.element.style.backgroundColor = this.colors.fill;
-	        this.line.setAttribute("stroke", this.colors.accent);
-	        this.fill.setAttribute("fill", this.colors.accent);
-	        this.nodes.forEach(function (node) {
-	          node.element.setAttribute("fill", _this.colors.accent);
-	        });
-	      }
-	    },
-	    render: {
-	      value: function render() {
-	        //  this.nodes[this.selected].move( this.points )
-	        this.calculatePath();
-	      }
-	    },
-	    calculatePoints: {
-	      value: function calculatePoints() {
-	        var _this = this;
-	
-	        this.points = [];
-	        this.nodes.forEach(function (node) {
-	          _this.points.push({ x: node.x, y: node.y });
-	        });
-	      }
-	    },
-	    calculatePath: {
-	      value: function calculatePath() {
-	
-	        //stroke data
-	        var data = "0 " + this.nodes[0].location.y + ", ";
-	
-	        // data should be re-ordered based on x location.
-	        // whatever function adds a node should add it at the right index
-	
-	        this.nodes.forEach(function (node) {
-	          //  let location = node.getCoordinates();
-	          data += node.location.x + " " + node.location.y + ", ";
-	        });
-	
-	        //  data += point.x*this.width+' '+ point.y*this.height+', ';
-	        data += this.width + " " + this.nodes[this.nodes.length - 1].location.y;
-	
-	        this.line.setAttribute("points", data);
-	
-	        // fill data
-	        // add bottom corners
-	
-	        data += ", " + this.width + " " + this.height + ", ";
-	        data += "0 " + this.height;
-	
-	        this.fill.setAttribute("points", data);
-	      }
-	    },
-	    click: {
-	      value: function click() {
-	        // find nearest node and set this.selected (index)
-	        this.hasMoved = false;
-	        this.selected = this.findNearestNode();
-	
-	        this.nodes[this.selected].move(this.mouse.x / this.width, 1 - this.mouse.y / this.height);
-	        this.scaleNode(this.selected);
-	
-	        // must do this b/c new node may have been created
-	        this.calculatePoints();
-	        this.emit("change", this.points);
-	        this.render();
-	      }
-	    },
-	    move: {
-	      value: function move() {
-	        if (this.clicked) {
-	          this.mouse.x = math.clip(this.mouse.x, 0, this.width);
-	          this.hasMoved = true;
-	
-	          this.nodes[this.selected].move(this.mouse.x / this.width, 1 - this.mouse.y / this.height);
-	          this.scaleNode(this.selected);
-	
-	          this.calculatePoints();
-	          this.emit("change", this.points);
-	          this.render();
-	        }
-	      }
-	    },
-	    release: {
-	      value: function release() {
-	
-	        if (!this.hasMoved) {
-	          this.nodes[this.selected].destroy();
-	        }
-	
-	        this.calculatePoints();
-	        this.emit("change", this.points);
-	        this.render();
-	
-	        // reset this.selected
-	        this.selected = null;
-	      }
-	    },
-	    findNearestNode: {
-	      value: function findNearestNode() {
-	        var nearestIndex = null;
-	        // set this unreasonably high so that every distance will be lower than it.
-	        var nearestDist = 10000;
-	        var before = false;
-	        var x = this.mouse.x / this.width;
-	        var y = 1 - this.mouse.y / this.height;
-	        var nodes = this.nodes;
-	        for (var i = 0; i < nodes.length; i++) {
-	
-	          // calculate the distance from mouse to this node using pythagorean theorem
-	          var distance = Math.sqrt(Math.pow(nodes[i].x - x, 2) + Math.pow(nodes[i].y - y, 2));
-	
-	          // if this distance is less than the previous shortest distance, use this index
-	          if (distance < nearestDist) {
-	            nearestDist = distance;
-	            nearestIndex = i;
-	            before = x > nodes[i].x;
-	          }
-	        }
-	
-	        // if not very close to any node, create a node
-	        if (!this.settings.noNewPoints && nearestDist > 0.07) {
-	
-	          nearestIndex = this.getIndexFromX(this.mouse.x / this.width);
-	
-	          this.nodes.splice(nearestIndex, 0, new Point({
-	            x: this.mouse.x / this.width,
-	            y: 1 - this.mouse.y / this.height
-	          }, this));
-	          this.hasMoved = true;
-	        }
-	
-	        return nearestIndex;
-	      }
-	    },
-	    getIndexFromX: {
-	      value: function getIndexFromX(x) {
-	        var _this = this;
-	
-	        var index = 0;
-	        this.nodes.forEach(function (node, i) {
-	          if (_this.nodes[i].x <= x) {
-	            index = i + 1;
-	          }
-	        });
-	        return index;
-	      }
-	    },
-	    scaleNode: {
-	      value: function scaleNode(i) {
-	
-	        var clippedX = math.clip(this.nodes[i].x, 0, 1);
-	        var clippedY = math.clip(this.nodes[i].y, 0, 1);
-	
-	        this.nodes[i].move(clippedX, clippedY);
-	      }
-	    },
-	    sortPoints: {
-	
-	      /**
-	      Sort the this.points array from left-most point to right-most point. You should not regularly need to use this, however it may be useful if the points get unordered.
-	      */
-	
-	      value: function sortPoints() {
-	        this.nodes.sort(function (a, b) {
-	          return a.x > b.x;
-	        });
-	      }
-	    },
-	    addPoint: {
-	
-	      /**
-	      Add a breakpoint on the envelope.
-	      @param x {number} x location of the point, normalized (0-1)
-	      @param y {number} y location of the point, normalized (0-1)
-	      */
-	
-	      value: function addPoint(x, y) {
-	        var index = this.nodes.length;
-	
-	        this.sortPoints();
-	
-	        for (var i = 0; i < this.nodes.length; i++) {
-	          if (x < this.nodes[i].x) {
-	            index = i;
-	            break;
-	          }
-	        }
-	
-	        this.nodes.splice(index, 0, new Point({
-	          x: x,
-	          y: y
-	        }, this));
-	
-	        this.scaleNode(index);
-	
-	        this.calculatePoints();
-	        this.emit("change", this.points);
-	
-	        this.render();
-	      }
-	    },
-	    scan: {
-	
-	      /**
-	      Find the level at a certain x location on the envelope.
-	      @param x {number} The x location to find the level of, normalized 0-1
-	      */
-	
-	      value: function scan(x) {
-	        // find surrounding points
-	        var nextIndex = this.getIndexFromX(x);
-	        var priorIndex = nextIndex - 1;
-	        if (priorIndex < 0) {
-	          priorIndex = 0;
-	        }
-	        if (nextIndex >= this.nodes.length) {
-	          nextIndex = this.nodes.length - 1;
-	        }
-	        var priorPoint = this.nodes[priorIndex];
-	        var nextPoint = this.nodes[nextIndex];
-	        var loc = math.scale(x, priorPoint.x, nextPoint.x, 0, 1);
-	        var value = math.interp(loc, priorPoint.y, nextPoint.y);
-	        this.emit("scan", value);
-	        return value;
-	      }
-	    },
-	    movePoint: {
-	
-	      /**
-	      Move a breakpoint on the envelope.
-	      @param index {number} The index of the breakpoint to move
-	      @param x {number} New x location, normalized 0-1
-	      @param y {number} New y location, normalized 0-1
-	      */
-	
-	      value: function movePoint(index, x, y) {
-	        this.nodes[index].move(x, y);
-	        this.scaleNode(index);
-	        this.calculatePoints();
-	        this.emit("change", this.points);
-	        this.render();
-	      }
-	    },
-	    adjustPoint: {
-	
-	      /**
-	      Move a breakpoint on the envelope by a certain amount.
-	      @param index {number} The index of the breakpoint to move
-	      @param xOffset {number} X displacement, normalized 0-1
-	      @param yOffset {number} Y displacement, normalized 0-1
-	      */
-	
-	      value: function adjustPoint(index, xOffset, yOffset) {
-	        this.nodes[index].move(this.nodes[index].x + xOffset, this.nodes[index].y + yOffset);
-	        this.scaleNode(index);
-	        this.calculatePoints();
-	        this.emit("change", this.points);
-	        this.render();
-	      }
-	    },
-	    destroyPoint: {
-	
-	      /**
-	      Remove a breakpoint from the envelope.
-	      @param index {number} Index of the breakpoint to remove
-	      */
-	
-	      value: function destroyPoint(index) {
-	        this.nodes[index].destroy();
-	        this.calculatePoints();
-	        this.emit("change", this.points);
-	        this.render();
-	      }
-	    },
-	    setPoints: {
-	
-	      /**
-	      Remove all existing breakpoints and add an entirely new set of breakpoints.
-	      @param allPoints {array} An array of objects with x/y properties (normalized 0-1). Each object in the array specifices the x/y location of a new breakpoint to be added.
-	      */
-	
-	      value: function setPoints(allPoints) {
-	        var _this = this;
-	
-	        while (this.nodes.length) {
-	          this.nodes[0].destroy();
-	        }
-	        allPoints.forEach(function (point) {
-	          _this.addPoint(point.x, point.y);
-	        });
-	        this.calculatePoints();
-	        this.emit("change", this.points);
-	        this.render();
-	      }
-	    }
-	  });
-	
-	  return Envelope;
-	})(Interface);
-	
-	module.exports = Envelope;
-
-/***/ }),
-/* 34 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	"use strict";
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _get = function get(object, property, receiver) { var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { return get(parent, property, receiver); } } else if ("value" in desc && desc.writable) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } };
-	
-	var _inherits = function (subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) subClass.__proto__ = superClass; };
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var dom = __webpack_require__(7);
-	//let math = require('../util/math');
-	var Interface = __webpack_require__(6);
-	
-	/**
-	* Spectrogram
-	*
-	* @description Audio spectrum visualization
-	*
-	* @demo <span nexus-ui="spectrogram"></span>
-	*
-	* @example
-	* var spectrogram = new Nexus.Spectrogram('#target')
-	*
-	* @example
-	* var spectrogram = new Nexus.Spectrogram('#target',{
-	*   'size': [300,150]
-	* })
-	*
-	* @output
-	* &nbsp;
-	* No events
-	*
-	*/
-	
-	var context = __webpack_require__(1).context;
-	
-	var Spectrogram = (function (_Interface) {
-	  function Spectrogram() {
-	    _classCallCheck(this, Spectrogram);
-	
-	    var options = ["scale", "value"];
-	
-	    var defaults = {
-	      size: [300, 150]
-	    };
-	
-	    _get(Object.getPrototypeOf(Spectrogram.prototype), "constructor", this).call(this, arguments, options, defaults);
-	
-	    this.context = context(); // jshint ignore:line
-	
-	    this.analyser = this.context.createAnalyser();
-	    this.analyser.fftSize = 2048;
-	    this.bufferLength = this.analyser.frequencyBinCount;
-	    this.dataArray = new Uint8Array(this.bufferLength);
-	
-	    this.active = true;
-	
-	    this.source = false;
-	
-	    this.init();
-	  }
-	
-	  _inherits(Spectrogram, _Interface);
-	
-	  _createClass(Spectrogram, {
-	    buildFrame: {
-	      value: function buildFrame() {
-	        this.canvas = new dom.SmartCanvas(this.parent);
-	        this.element = this.canvas.element;
-	      }
-	    },
-	    sizeInterface: {
-	      value: function sizeInterface() {
-	        this.canvas.resize(this.width, this.height);
-	      }
-	    },
-	    colorInterface: {
-	      value: function colorInterface() {
-	        this.canvas.element.style.backgroundColor = this.colors.fill;
-	      }
-	    },
-	    render: {
-	      value: function render() {
-	
-	        if (this.active) {
-	          requestAnimationFrame(this.render.bind(this));
-	        }
-	
-	        this.analyser.getByteFrequencyData(this.dataArray);
-	
-	        this.canvas.context.fillStyle = this.colors.fill;
-	        this.canvas.context.fillRect(0, 0, this.canvas.element.width, this.canvas.element.height);
-	
-	        if (this.source && this.dataArray) {
-	
-	          //console.log(this.dataArray);
-	
-	          var barWidth = this.canvas.element.width / this.bufferLength;
-	          var barHeight = undefined;
-	          var x = 0;
-	
-	          var definition = this.canvas.element.width / 50;
-	
-	          for (var i = 0; i < this.bufferLength; i = i + definition) {
-	            barHeight = Math.max.apply(null, this.dataArray.subarray(i, i + definition));
-	            barHeight /= 255;
-	            barHeight *= this.canvas.element.height;
-	
-	            this.canvas.context.fillStyle = this.colors.accent;
-	            this.canvas.context.fillRect(x, this.canvas.element.height - barHeight, barWidth * definition, barHeight);
-	
-	            x += barWidth * definition;
-	          }
-	        }
-	      }
-	    },
-	    connect: {
-	
-	      /**
-	      Equivalent to "patching in" an audio node to visualize. NOTE: You cannot connect audio nodes across two different audio contexts. NexusUI runs its audio analysis on its own audio context, Nexus.context. If the audio node you are visualizing is created on a different audio context, you will need to tell NexusUI to use that context instead: i.e. Nexus.context = YourAudioContextName. For example, in ToneJS projects, the line would be: Nexus.context = Tone.context . We recommend that you write that line of code only once at the beginning of your project.
-	      @param node {AudioNode} The audio node to visualize
-	      @example Nexus.context = Tone.context // or another audio context you have created
-	      spectrogram.connect( Tone.Master );
-	      */
-	
-	      value: function connect(node) {
-	        if (this.source) {
-	          this.disconnect();
-	        }
-	        this.source = node;
-	        this.source.connect(this.analyser);
-	        this.render();
-	      }
-	    },
-	    disconnect: {
-	
-	      /**
-	      Stop visualizing the source node and disconnect it.
-	      */
-	
-	      value: function disconnect() {
-	        this.source.disconnect(this.analyser);
-	        this.source = null;
-	      }
-	    },
-	    click: {
-	      value: function click() {
-	        this.active = !this.active;
-	        this.render();
-	      }
-	    },
-	    customDestroy: {
-	      value: function customDestroy() {
-	        this.active = false;
-	      }
-	    }
-	  });
-	
-	  return Spectrogram;
-	})(Interface);
-	
-	module.exports = Spectrogram;
-
-/***/ }),
-/* 35 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	"use strict";
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _get = function get(object, property, receiver) { var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { return get(parent, property, receiver); } } else if ("value" in desc && desc.writable) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } };
-	
-	var _inherits = function (subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) subClass.__proto__ = superClass; };
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var dom = __webpack_require__(7);
-	var math = __webpack_require__(5);
-	var Interface = __webpack_require__(6);
-	
-	/**
-	* Meter
-	*
-	* @description Stereo decibel meter
-	*
-	* @demo <span nexus-ui="meter"></span>
-	*
-	* @example
-	* var meter = new Nexus.Meter('#target')
-	*
-	* @example
-	* var meter = new Nexus.Meter('#target',{
-	*   size: [75,75]
-	* })
-	*
-	* @output
-	* &nbsp;
-	* No events
-	*
-	*/
-	
-	var context = __webpack_require__(1).context;
-	
-	var Meter = (function (_Interface) {
-	  function Meter() {
-	    _classCallCheck(this, Meter);
-	
-	    var options = ["scale", "value"];
-	
-	    var defaults = {
-	      size: [30, 100]
-	    };
-	
-	    _get(Object.getPrototypeOf(Meter.prototype), "constructor", this).call(this, arguments, options, defaults);
-	
-	    this.context = context(); // jshint ignore:line
-	
-	    this.channels = 2;
-	
-	    this.splitter = this.context.createChannelSplitter(this.channels);
-	
-	    this.analysers = [];
-	
-	    for (var i = 0; i < this.channels; i++) {
-	      var analyser = this.context.createAnalyser();
-	      this.splitter.connect(analyser, i);
-	      analyser.fftSize = 1024;
-	      analyser.smoothingTimeConstant = 1;
-	      this.analysers.push(analyser);
-	    }
-	    this.bufferLength = this.analysers[0].frequencyBinCount;
-	    this.dataArray = new Float32Array(this.bufferLength);
-	
-	    /*
-	        // add linear gradient
-	        var grd = canvasCtx.createLinearGradient(0, 0, 0, canvas.height);
-	        // light blue
-	        grd.addColorStop(0, '#000');
-	        grd.addColorStop(0.2, '#bbb');
-	        grd.addColorStop(0.4, '#d18');
-	        // dark blue
-	        grd.addColorStop(1, '#d18');
-	        canvasCtx.fillStyle = grd; */
-	
-	    this.active = true;
-	
-	    this.db = -Infinity;
-	
-	    this.init();
-	
-	    this.meterWidth = this.canvas.element.width / this.channels;
-	
-	    this.render();
-	  }
-	
-	  _inherits(Meter, _Interface);
-	
-	  _createClass(Meter, {
-	    buildFrame: {
-	      value: function buildFrame() {
-	        this.canvas = new dom.SmartCanvas(this.parent);
-	        this.element = this.canvas.element;
-	      }
-	    },
-	    sizeInterface: {
-	      value: function sizeInterface() {
-	        this.canvas.resize(this.width, this.height);
-	      }
-	    },
-	    colorInterface: {
-	      value: function colorInterface() {
-	        this.canvas.element.style.backgroundColor = this.colors.fill;
-	      }
-	    },
-	    render: {
-	      value: function render() {
-	
-	        if (this.active) {
-	          requestAnimationFrame(this.render.bind(this));
-	        }
-	
-	        this.canvas.context.fillStyle = this.colors.fill;
-	        this.canvas.context.fillRect(0, 0, this.canvas.element.width, this.canvas.element.height);
-	
-	        for (var i = 0; i < this.analysers.length; i++) {
-	
-	          if (this.source) {
-	
-	            this.analysers[i].getFloatTimeDomainData(this.dataArray);
-	
-	            var rms = 0;
-	
-	            for (var _i = 0; _i < this.dataArray.length; _i++) {
-	              rms += this.dataArray[_i] * this.dataArray[_i];
-	            }
-	
-	            rms = Math.sqrt(rms / this.dataArray.length);
-	
-	            this.db = 20 * Math.log10(rms);
-	          } else if (this.db > -200 && this.db !== -Infinity) {
-	            this.db -= 1;
-	          } else {
-	            this.db = -Infinity;
-	          }
-	
-	          //console.log(db)
-	
-	          if (this.db > -70) {
-	
-	            var linear = math.normalize(this.db, -70, 5);
-	            var exp = linear * linear;
-	            var y = math.scale(exp, 0, 1, this.element.height, 0);
-	
-	            this.canvas.context.fillStyle = this.colors.accent;
-	            this.canvas.context.fillRect(this.meterWidth * i, y, this.meterWidth, this.canvas.element.height - y);
-	
-	            //console.log("rendering...")
-	          }
-	        }
-	      }
-	    },
-	    connect: {
-	
-	      /**
-	      Equivalent to "patching in" an audio node to visualize. NOTE: You cannot connect audio nodes across two different audio contexts. NexusUI runs its audio analysis on its own audio context, Nexus.context. If the audio node you are visualizing is created on a different audio context, you will need to tell NexusUI to use that context instead: i.e. Nexus.context = YourAudioContextName. For example, in ToneJS projects, the line would be: Nexus.context = Tone.context . We recommend that you write that line of code only once at the beginning of your project.
-	      @param node {AudioNode} The audio node to visualize
-	      @param channels {number} (optional) The number of channels in the source node to watch. If not specified, the interface will look for a .channelCount property on the input node. If it does not exist, the interface will default to 1 channel.
-	      @example Nexus.context = Tone.context // or another audio context you have created
-	      meter.connect( Tone.Master, 2 );
-	      */
-	
-	      value: function connect(node, channels) {
-	        if (this.source) {
-	          this.disconnect();
-	        }
-	        //this.dummy.disconnect(this.splitter);
-	
-	        if (channels) {
-	          this.channels = channels;
-	        } else if (node.channelCount) {
-	          this.channels = node.channelCount;
-	        } else {
-	          this.channels = 2;
-	        }
-	        this.meterWidth = this.canvas.element.width / this.channels;
-	
-	        this.source = node;
-	        this.source.connect(this.splitter);
-	
-	        //  this.render();
-	      }
-	    },
-	    disconnect: {
-	
-	      /**
-	      Stop visualizing the source node and disconnect it.
-	      */
-	
-	      value: function disconnect() {
-	
-	        this.source.disconnect(this.splitter);
-	        this.source = false;
-	        //  this.dummy.connect(this.splitter);
-	        this.meterWidth = this.canvas.element.width / this.channels;
-	      }
-	    },
-	    click: {
-	      value: function click() {
-	        this.active = !this.active;
-	        this.render();
-	      }
-	    },
-	    customDestroy: {
-	      value: function customDestroy() {
-	        this.active = false;
-	      }
-	    }
-	  });
-	
-	  return Meter;
-	})(Interface);
-	
-	module.exports = Meter;
-
-/***/ }),
-/* 36 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	"use strict";
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _get = function get(object, property, receiver) { var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { return get(parent, property, receiver); } } else if ("value" in desc && desc.writable) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } };
-	
-	var _inherits = function (subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) subClass.__proto__ = superClass; };
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var dom = __webpack_require__(7);
-	var Interface = __webpack_require__(6);
-	
-	/**
-	* Oscilloscope
-	*
-	* @description Visualizes a waveform's stream of values.
-	*
-	* @demo <span nexus-ui="oscilloscope"></span>
-	*
-	* @example
-	* var oscilloscope = new Nexus.Oscilloscope('#target')
-	*
-	* @example
-	* var oscilloscope = new Nexus.Oscilloscope('#target',{
-	*   'size': [300,150]
-	* })
-	*
-	* @output
-	* &nbsp;
-	* No events
-	*
-	*/
-	
-	var context = __webpack_require__(1).context;
-	
-	var Oscilloscope = (function (_Interface) {
-	  function Oscilloscope() {
-	    _classCallCheck(this, Oscilloscope);
-	
-	    var options = ["scale", "value"];
-	
-	    var defaults = {
-	      size: [300, 150]
-	    };
-	
-	    _get(Object.getPrototypeOf(Oscilloscope.prototype), "constructor", this).call(this, arguments, options, defaults);
-	
-	    this.context = context(); // jshint ignore:line
-	
-	    this.analyser = this.context.createAnalyser();
-	    this.analyser.fftSize = 2048;
-	    this.bufferLength = this.analyser.frequencyBinCount;
-	    this.dataArray = new Uint8Array(this.bufferLength);
-	    this.analyser.getByteTimeDomainData(this.dataArray);
-	
-	    this.active = true;
-	
-	    this.source = false;
-	
-	    this.init();
-	
-	    this.render();
-	  }
-	
-	  _inherits(Oscilloscope, _Interface);
-	
-	  _createClass(Oscilloscope, {
-	    buildFrame: {
-	      value: function buildFrame() {
-	        this.canvas = new dom.SmartCanvas(this.parent);
-	        this.element = this.canvas.element;
-	      }
-	    },
-	    sizeInterface: {
-	      value: function sizeInterface() {
-	        this.canvas.resize(this.width, this.height);
-	      }
-	    },
-	    colorInterface: {
-	      value: function colorInterface() {
-	        this.canvas.element.style.backgroundColor = this.colors.fill;
-	      }
-	    },
-	    render: {
-	      value: function render() {
-	
-	        if (this.active) {
-	          requestAnimationFrame(this.render.bind(this));
-	        }
-	
-	        this.analyser.getByteTimeDomainData(this.dataArray);
-	
-	        this.canvas.context.fillStyle = this.colors.fill;
-	        this.canvas.context.fillRect(0, 0, this.canvas.element.width, this.canvas.element.height);
-	
-	        this.canvas.context.lineWidth = ~ ~(this.height / 100 + 2);
-	        this.canvas.context.strokeStyle = this.colors.accent;
-	
-	        this.canvas.context.beginPath();
-	
-	        if (this.source) {
-	
-	          var sliceWidth = this.canvas.element.width * 1 / this.bufferLength;
-	          var x = 0;
-	
-	          for (var i = 0; i < this.bufferLength; i++) {
-	
-	            var v = this.dataArray[i] / 128;
-	            var y = v * this.canvas.element.height / 2;
-	
-	            if (i === 0) {
-	              this.canvas.context.moveTo(x, y);
-	            } else {
-	              this.canvas.context.lineTo(x, y);
-	            }
-	
-	            x += sliceWidth;
-	          }
-	        } else {
-	          this.canvas.context.moveTo(0, this.canvas.element.height / 2);
-	          this.canvas.context.lineTo(this.canvas.element.width, this.canvas.element.height / 2);
-	        }
-	
-	        this.canvas.context.stroke();
-	      }
-	    },
-	    connect: {
-	
-	      /**
-	      Equivalent to "patching in" an audio node to visualize. NOTE: You cannot connect audio nodes across two different audio contexts. NexusUI runs its audio analysis on its own audio context, Nexus.context. If the audio node you are visualizing is created on a different audio context, you will need to tell NexusUI to use that context instead: i.e. Nexus.context = YourAudioContextName. For example, in ToneJS projects, the line would be: Nexus.context = Tone.context . We recommend that you write that line of code only once at the beginning of your project.
-	      @param node {AudioNode} The audio node to visualize
-	      @example Nexus.context = Tone.context // or another audio context you have created
-	      oscilloscope.connect( Tone.Master );
-	      */
-	
-	      value: function connect(node) {
-	
-	        if (this.source) {
-	          this.disconnect();
-	        }
-	
-	        this.source = node;
-	        this.source.connect(this.analyser);
-	
-	        this.render();
-	      }
-	    },
-	    disconnect: {
-	
-	      /**
-	      Stop visualizing the source node and disconnect it.
-	      */
-	
-	      value: function disconnect() {
-	        if (this.source) {
-	          this.source.disconnect(this.analyser);
-	          this.source = null;
-	        }
-	      }
-	    },
-	    click: {
-	      value: function click() {
-	        this.active = !this.active;
-	        this.render();
-	      }
-	    },
-	    customDestroy: {
-	      value: function customDestroy() {
-	        this.active = false;
-	      }
-	    }
-	  });
-	
-	  return Oscilloscope;
-	})(Interface);
-	
-	module.exports = Oscilloscope;
-
-/***/ }),
-/* 37 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	"use strict";
-	
-	var _interopRequire = function (obj) { return obj && obj.__esModule ? obj["default"] : obj; };
-	
-	var _interopRequireWildcard = function (obj) { return obj && obj.__esModule ? obj : { "default": obj }; };
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	/*
-	Main concept:
-	synth = new Nexus.Rack('elementID');
-	
-	Transform all elements inside the div
-	synth.elementID will hold the first slider interface
-	
-	2) In future, potentially writing a rack that is re-usable?
-	Could also take JSON
-	
-	new Nexus.Rack('#target',{
-	  pre: () => {
-	    create some divs here, or some audio code
-	  },
-	  interface: {
-	    slider1: Nexus.add.slider({
-	      top:10,
-	      left:10,
-	      width:50,
-	      height:100,
-	      min: 0,
-	      max: 100,
-	      step: 1
-	    }),
-	    wave1: Nexus.add.waveform({
-	      file: './path/to/file.mp3',
-	      width:500,
-	      height:100,
-	      mode: 'range'
-	    })
-	  },
-	  init: () => {
-	    // some audio init code goes here...
-	  }
-	});
-	
-	*/
-	
-	var transform = _interopRequireWildcard(__webpack_require__(38));
-	
-	var dom = _interopRequire(__webpack_require__(7));
-	
-	var colors = __webpack_require__(1).colors;
-	
-	var Rack = (function () {
-	  function Rack(target, settings) {
-	    _classCallCheck(this, Rack);
-	
-	    this.meta = {};
-	    this.meta.target = target;
-	    this.meta.parent = dom.parseElement(target); // should be a generic function for parsing a 'target' argument that checks for string/DOM/jQUERY
-	    this.meta.colors = {};
-	
-	    if (settings) {
-	      this.meta.attribute = settings.attribute || "nexus-ui";
-	      this.meta.title = settings.name || false;
-	      this.meta.open = settings.open || false;
-	    } else {
-	      this.meta.attribute = "nexus-ui";
-	      this.meta.title = false;
-	      this.meta.open = false;
-	    }
-	
-	    var defaultColors = colors(); // jshint ignore:line
-	    this.meta.colors.accent = defaultColors.accent;
-	    this.meta.colors.fill = defaultColors.fill;
-	    this.meta.colors.light = defaultColors.light;
-	    this.meta.colors.dark = defaultColors.dark;
-	    this.meta.colors.mediumLight = defaultColors.mediumLight;
-	    this.meta.colors.mediumDark = defaultColors.mediumDark;
-	    this.buildInterface();
-	    this.colorInterface();
-	  }
-	
-	  _createClass(Rack, {
-	    buildInterface: {
-	      value: function buildInterface() {
-	        var _this = this;
-	
-	        this.meta.parent.style.boxSizing = "border-box";
-	        this.meta.parent.style.userSelect = "none";
-	        this.meta.parent.style.mozUserSelect = "none";
-	        this.meta.parent.style.webkitUserSelect = "none";
-	
-	        this.meta.contents = document.createElement("div");
-	
-	        while (this.meta.parent.childNodes.length > 0) {
-	          this.meta.contents.appendChild(this.meta.parent.childNodes[0]);
-	        }
-	
-	        this.meta.contents.style.padding = "0px";
-	        this.meta.contents.style.boxSizing = "border-box";
-	
-	        if (this.meta.title) {
-	          this.meta.titleBar = document.createElement("div");
-	          this.meta.titleBar.innerHTML = this.meta.title;
-	          this.meta.titleBar.style.fontFamily = "arial";
-	          this.meta.titleBar.style.position = "relative";
-	          this.meta.titleBar.style.color = "#888";
-	          this.meta.titleBar.style.padding = "7px";
-	          this.meta.titleBar.style.fontSize = "12px";
-	
-	          this.meta.button = document.createElement("div");
-	          this.meta.button.style.position = "absolute";
-	          this.meta.button.style.top = "5px";
-	          this.meta.button.style.right = "5px";
-	          this.meta.button.innerHTML = "-";
-	          this.meta.button.style.padding = "0px 5px 2px";
-	          this.meta.button.style.lineHeight = "12px";
-	          this.meta.button.style.fontSize = "15px";
-	
-	          this.meta.button.style.cursor = "pointer";
-	
-	          this.meta.button.addEventListener("mouseover", function () {
-	            _this.meta.button.style.backgroundColor = _this.meta.colors.mediumDark;
-	          });
-	          this.meta.button.addEventListener("mouseleave", function () {
-	            _this.meta.button.style.backgroundColor = _this.meta.colors.mediumLight;
-	          });
-	          this.meta.button.addEventListener("click", function () {
-	            if (_this.meta.open) {
-	              _this.hide();
-	            } else {
-	              _this.show();
-	            }
-	          });
-	
-	          this.meta.titleBar.appendChild(this.meta.button);
-	
-	          this.meta.parent.appendChild(this.meta.titleBar);
-	        }
-	        this.meta.parent.appendChild(this.meta.contents);
-	
-	        //  var width = this.meta.parent.style.width = getComputedStyle(this.meta.parent).getPropertyValue('width');
-	        //    this.meta.parent.style.width = width;
-	
-	        var ui = transform.section(this.meta.target, this.meta.attribute);
-	        for (var key in ui) {
-	          this[key] = ui[key];
-	        }
-	      }
-	    },
-	    colorInterface: {
-	      value: function colorInterface() {
-	        if (this.meta.title) {
-	          this.meta.button.style.backgroundColor = this.meta.colors.mediumLight;
-	          this.meta.button.style.border = "solid 0px " + this.meta.colors.fill;
-	          this.meta.parent.style.border = "solid 1px " + this.meta.colors.mediumLight;
-	          this.meta.parent.style.backgroundColor = this.meta.colors.light;
-	          this.meta.titleBar.style.backgroundColor = this.meta.colors.fill;
-	        }
-	      }
-	    },
-	    show: {
-	      value: function show() {
-	        this.meta.contents.style.display = "block";
-	        this.meta.open = true;
-	      }
-	    },
-	    hide: {
-	      value: function hide() {
-	        this.meta.contents.style.display = "none";
-	        this.meta.open = false;
-	      }
-	    },
-	    colorize: {
-	      value: function colorize(type, color) {
-	        for (var key in this) {
-	          if (this[key].colorize) {
-	            this[key].colorize(type, color);
-	          }
-	        }
-	        this.meta.colors[type] = color;
-	        this.colorInterface();
-	      }
-	    },
-	    empty: {
-	      value: function empty() {
-	        for (var key in this) {
-	          if (this[key].destroy) {
-	            this[key].destroy();
-	          }
-	        }
-	      }
-	    }
-	  });
-	
-	  return Rack;
-	})();
-	
-	module.exports = Rack;
-
-/***/ }),
-/* 38 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	"use strict";
-	
-	var _interopRequire = function (obj) { return obj && obj.__esModule ? obj["default"] : obj; };
-	
-	Object.defineProperty(exports, "__esModule", {
-	  value: true
-	});
-	"use strict";
-	
-	var dom = _interopRequire(__webpack_require__(7));
-	
-	var Interfaces = _interopRequire(__webpack_require__(2));
-	
-	var createInterfaceID = function (widget, interfaceIDs) {
-	  var type = widget.type;
-	  if (interfaceIDs[type]) {
-	    interfaceIDs[type]++;
-	  } else {
-	    interfaceIDs[type] = 1;
-	  }
-	  return type + interfaceIDs[type];
-	};
-	
-	var element = function (element, type, options) {
-	  options = options || {};
-	  for (var i = 0; i < element.attributes.length; i++) {
-	    var att = element.attributes[i];
-	    //  try {
-	    //    options[att.nodeName] = eval(att.nodeValue);
-	    //  } catch(e) {
-	    options[att.nodeName] = att.nodeValue;
-	    //  }
-	  }
-	  type = type[0].toUpperCase() + type.slice(1);
-	  var widget = new Interfaces[type](element, options);
-	  widget.id = element.id;
-	  return widget;
-	};
-	
-	var section = function (parent, keyword) {
-	
-	  keyword = keyword || "nexus-ui";
-	
-	  var interfaceIDs = {};
-	
-	  var container = dom.parseElement(parent);
-	
-	  var ui = {};
-	
-	  var htmlElements = container.getElementsByTagName("*");
-	  var elements = [];
-	  for (var i = 0; i < htmlElements.length; i++) {
-	    elements.push(htmlElements[i]);
-	  }
-	  for (var i = 0; i < elements.length; i++) {
-	    var type = elements[i].getAttribute(keyword);
-	    if (type) {
-	      var formattedType = false;
-	      for (var key in Interfaces) {
-	        if (type.toLowerCase() === key.toLowerCase()) {
-	          formattedType = key;
-	        }
-	      }
-	      console.log(formattedType);
-	      var widget = element(elements[i], formattedType);
-	      if (widget.id) {
-	        ui[widget.id] = widget;
-	      } else {
-	        var id = createInterfaceID(widget, interfaceIDs);
-	        ui[id] = widget;
-	      }
-	    }
-	  }
-	
-	  return ui;
-	};
-	
-	var add = function (type, parent, options) {
-	  var target = document.createElement("div");
-	  options = options || {};
-	  if (parent) {
-	    parent = dom.parseElement(parent);
-	  } else {
-	    parent = document.body;
-	  }
-	  parent.appendChild(target);
-	  options.target = target;
-	  if (options.size) {
-	    target.style.width = options.size[0] + "px";
-	    target.style.height = options.size[1] + "px";
-	  }
-	  return element(target, type, options);
-	};
-	
-	exports.element = element;
-	exports.section = section;
-	exports.add = add;
-
-/***/ }),
-/* 39 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	"use strict";
-	
-	var _interopRequire = function (obj) { return obj && obj.__esModule ? obj["default"] : obj; };
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var math = _interopRequire(__webpack_require__(5));
-	
-	var Tune = (function () {
-	  function Tune() {
-	    _classCallCheck(this, Tune);
-	
-	    // the scale as ratios
-	    this.scale = [];
-	
-	    // i/o modes
-	    this.mode = {
-	      output: "frequency",
-	      input: "step"
-	    };
-	
-	    // ET major
-	    this.etmajor = [261.62558, 293.664764, 329.627563, 349.228241, 391.995422, 440, 493.883301, 523.25116];
-	
-	    // Root frequency.
-	    this.root = math.mtof(60); // * Math.pow(2,(60-69)/12);
-	
-	    // default is a major scale
-	    this.createScale(0, 2, 4, 5, 7, 9, 11);
-	  }
-	
-	  _createClass(Tune, {
-	    note: {
-	
-	      /* Return data in the mode you are in (freq, ratio, or midi) */
-	
-	      value: function note(input, octave) {
-	
-	        var newvalue = undefined;
-	
-	        if (this.mode.output === "frequency") {
-	          newvalue = this.frequency(input, octave);
-	        } else if (this.mode.output === "ratio") {
-	          newvalue = this.ratio(input, octave);
-	        } else if (this.mode.output === "MIDI") {
-	          newvalue = this.MIDI(input, octave);
-	        } else {
-	          newvalue = this.frequency(input, octave);
-	        }
-	
-	        return newvalue;
-	      }
-	    },
-	    frequency: {
-	
-	      /* Return freq data */
-	
-	      value: function frequency(stepIn, octaveIn) {
-	
-	        if (this.mode.input === "midi" || this.mode.input === "MIDI") {
-	          this.stepIn += 60;
-	        }
-	
-	        // what octave is our input
-	        var octave = Math.floor(stepIn / this.scale.length);
-	
-	        if (octaveIn) {
-	          octave += octaveIn;
-	        }
-	
-	        // which scale degree (0 - scale length) is our input
-	        var scaleDegree = stepIn % this.scale.length;
-	
-	        while (scaleDegree < 0) {
-	          scaleDegree += this.scale.length;
-	        }
-	
-	        var ratio = this.scale[scaleDegree];
-	
-	        var freq = this.root * ratio;
-	
-	        freq = freq * Math.pow(2, octave);
-	
-	        // truncate irrational numbers
-	        freq = Math.floor(freq * 100000000000) / 100000000000;
-	
-	        return freq;
-	      }
-	    },
-	    ratio: {
-	
-	      /* Force return ratio data */
-	
-	      value: function ratio(stepIn, octaveIn) {
-	
-	        if (this.mode.input === "midi" || this.mode.input === "MIDI") {
-	          this.stepIn += 60;
-	        }
-	
-	        // what octave is our input
-	        var octave = Math.floor(stepIn / this.scale.length);
-	
-	        if (octaveIn) {
-	          octave += octaveIn;
-	        }
-	
-	        // which scale degree (0 - scale length) is our input
-	        var scaleDegree = stepIn % this.scale.length;
-	
-	        // what ratio is our input to our key
-	        var ratio = Math.pow(2, octave) * this.scale[scaleDegree];
-	
-	        ratio = Math.floor(ratio * 100000000000) / 100000000000;
-	
-	        return ratio;
-	      }
-	    },
-	    MIDI: {
-	
-	      /* Force return adjusted MIDI data */
-	
-	      value: function MIDI(stepIn, octaveIn) {
-	
-	        var newvalue = this.frequency(stepIn, octaveIn);
-	
-	        var n = 69 + 12 * Math.log(newvalue / 440) / Math.log(2);
-	
-	        n = Math.floor(n * 1000000000) / 1000000000;
-	
-	        return n;
-	      }
-	    },
-	    createScale: {
-	      value: function createScale() {
-	        var newScale = [];
-	        for (var i = 0; i < arguments.length; i++) {
-	          newScale.push(math.mtof(60 + arguments[i]));
-	        }
-	        this.loadScaleFromFrequencies(newScale);
-	      }
-	    },
-	    createJIScale: {
-	      value: function createJIScale() {
-	        this.scale = [];
-	        for (var i = 0; i < arguments.length; i++) {
-	          this.scale.push(arguments[i]);
-	        }
-	      }
-	    },
-	    loadScaleFromFrequencies: {
-	      value: function loadScaleFromFrequencies(freqs) {
-	        this.scale = [];
-	        for (var i = 0; i < freqs.length - 1; i++) {
-	          this.scale.push(freqs[i] / freqs[0]);
-	        }
-	      }
-	    },
-	    loadScale: {
-	
-	      /* Load a new scale */
-	
-	      value: function loadScale(name) {
-	
-	        /* load the scale */
-	        var freqs = this.scales[name].frequencies;
-	        this.loadScaleFromFrequencies(freqs);
-	      }
-	    },
-	    search: {
-	
-	      /* Search the names of tunings
-	      	 Returns an array of names of tunings */
-	
-	      value: function search(letters) {
-	        var possible = [];
-	        for (var key in this.scales) {
-	          if (key.toLowerCase().indexOf(letters.toLowerCase()) !== -1) {
-	            possible.push(key);
-	          }
-	        }
-	        return possible;
-	      }
-	    },
-	    chord: {
-	
-	      /* Return a collection of notes as an array */
-	
-	      value: function chord(midis) {
-	        var output = [];
-	        for (var i = 0; i < midis.length; i++) {
-	          output.push(this.note(midis[i]));
-	        }
-	        return output;
-	      }
-	    }
-	  });
-	
-	  return Tune;
-	})();
-	
-	module.exports = Tune;
-
-/***/ }),
-/* 40 */
-/***/ (function(module, exports) {
-
-	"use strict";
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	//Disable jshint warning concerning trailing regular params
-	/*jshint -W138 */
-	
-	var Radio = (function () {
-	    //if non-existent buttons are switched, they are ignored
-	
-	    function Radio() {
-	        for (var _len = arguments.length, onVals = Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
-	            onVals[_key - 1] = arguments[_key];
-	        }
-	
-	        var length = arguments[0] === undefined ? 3 : arguments[0];
-	
-	        _classCallCheck(this, Radio);
-	
-	        //each optional 'onVals' argument switches on that value in the Radio if it exists
-	        //In the example below, a 3-button radio is created, index 0 is switched on, index 1 is switched on then then attempted again producing an warning, and the final argument produces a warning because the index value does not exist.
-	        //Example:
-	        //`  radio = new Radio(3, 0, 1, 1, 3);
-	        //…  [1,1,0]
-	
-	        if (length < 0) {
-	            length = 1;
-	        }
-	
-	        this.length = length;
-	        this.onVals = onVals;
-	        this.array = new Array(length).fill(0);
-	
-	        if (onVals.length > 0) {
-	            this.on.apply(this, onVals);
-	        }
-	    }
-	
-	    _createClass(Radio, {
-	        select: {
-	            value: function select(value) {
-	                this.array.fill(0);
-	                this.array[value] = 1;
-	                return this.array;
-	            }
-	        },
-	        flip: {
-	            value: function flip() {
-	                for (var _len = arguments.length, values = Array(_len), _key = 0; _key < _len; _key++) {
-	                    values[_key] = arguments[_key];
-	                }
-	
-	                //flips the specified values. if no value is specified, flips all buttons
-	                var a = this.array;
-	                if (values.length > 0) {
-	                    values.forEach(function (v) {
-	                        if (v > a.length - 1) {
-	                            console.warn("Warning: AnonRadio[" + v + "] does not exist");
-	                        } else {
-	                            a[v] = a[v] ? 0 : 1;
-	                        }
-	                    });
-	                } else {
-	                    a.forEach(function (v, i, arr) {
-	                        arr[i] = v ? 0 : 1;
-	                    });
-	                }
-	                return a;
-	            }
-	        },
-	        on: {
-	            value: function on() {
-	                for (var _len = arguments.length, values = Array(_len), _key = 0; _key < _len; _key++) {
-	                    values[_key] = arguments[_key];
-	                }
-	
-	                //switch on the specified values. if no value specified, flips on all buttons
-	                var a = this.array;
-	                if (values.length > 0) {
-	                    values.forEach(function (v) {
-	                        if (v > a.length - 1) {
-	                            console.warn("Warning: AnonRadio[" + v + "] exceeds size of object");
-	                        } else {
-	                            if (a[v] === 1) {
-	                                console.warn("Warning: AnonRadio[" + v + "] was already on.");
-	                            }
-	                            a[v] = 1;
-	                        }
-	                    });
-	                } else {
-	                    a.fill(1);
-	                }
-	                return a;
-	            }
-	        },
-	        off: {
-	            value: function off() {
-	                for (var _len = arguments.length, values = Array(_len), _key = 0; _key < _len; _key++) {
-	                    values[_key] = arguments[_key];
-	                }
-	
-	                //switch off the specified values. if no value specified, flips off all buttons
-	                var a = this.array;
-	                if (values.length > 0) {
-	                    values.forEach(function (v) {
-	                        a[v] = 0;
-	                    });
-	                } else {
-	                    a.fill(0);
-	                }
-	                return a;
-	            }
-	        }
-	    });
-	
-	    return Radio;
-	})();
-	
-	module.exports = Radio;
-
-/***/ }),
-/* 41 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	var WAAClock = __webpack_require__(42)
-	
-	module.exports = WAAClock
-	if (typeof window !== 'undefined') window.WAAClock = WAAClock
+	this.draw();
+}
 
 
-/***/ }),
-/* 42 */
-/***/ (function(module, exports, __webpack_require__) {
+/** 
+  @method setBuffer 
+  Load a web audio AudioBuffer into the wavegrain ui, for analysis and visualization.
+  @param {AudioBuffer} [buffer] The buffer to be loaded.
+  */
+wavegrain.prototype.setBuffer = function(prebuff) {
 
-	/* WEBPACK VAR INJECTION */(function(process) {var isBrowser = (typeof window !== 'undefined')
+	this.channels = prebuff.numberOfChannels
+	this.duration = prebuff.duration
+	this.sampleRate = prebuff.sampleRate
+	this.waveHeight = this.GUI.h / this.channels
+
+	// timescale
+	this.durationMS = (this.duration * 1000) 
+	this.timescale = 0
+	while (~~(this.durationMS/this.times[this.timescale].dur) > 7 && this.timescale < this.times.length ) {
+		this.timescale++;
+	}
+	this.timescale = this.times[this.timescale]
+
+	this.rawbuffer = []
+	this.buffer = []
+
+	// reduce/crush buffers
+	for (var i=0;i<this.channels;i++) {
+		this.rawbuffer.push(prebuff.getChannelData(0))
+		this.buffer.push([])
+
+		// counts faster (& less accurately) through larger buffers.
+		// for every 5 seconds in the buffer, our counter skips 1.
+		// so a 10 second buffer will only look at every 3rd sample
+		//   when calculating wavegrain.
+		var countinc = ~~(this.rawbuffer[0].length / (this.sampleRate*5)) + 1
+
+		var groupsize = ~~(this.rawbuffer[i].length/this.pieces)
+		var cmax = 0
+		var cmin = 0
+		var group = 0
+		var vis = []
+		for (var j=0;j<this.rawbuffer[i].length;j += countinc) {
+			if (this.rawbuffer[i][j]>0) {
+				cmax = Math.max(cmax,this.rawbuffer[i][j])
+			} else {
+				cmin = Math.min(cmin,this.rawbuffer[i][j])
+			}
+			if (j > group * groupsize) {
+				this.buffer[i].push([cmax,cmin])
+				group++
+				cmin = 0
+				cmax = 0
+			}
+		}
+	}
+
+	if (this.val.start && this.val.stop) {
+
+	}
+
+	this.val.starttime = Math.round(this.val.start * this.durationMS)
+	this.val.stoptime = Math.round(this.val.stop * this.durationMS)
+	//this.val.looptime = Math.round(this.val.size * this.durationMS)
 	
-	var CLOCK_DEFAULTS = {
-	  toleranceLate: 0.10,
-	  toleranceEarly: 0.001
+
+	this.draw()
+
+}
+
+/** 
+  @method select 
+  Set the selection start and end points.
+  @param {integer} [start] Selection start point in milliseconds
+  @param {integer} [end] Selection end point in milliseconds
+  */
+wavegrain.prototype.select = function(start,stop) {
+	this.val.start = math.clip(start / this.durationMS,0,1)
+	this.val.stop = math.clip(stop / this.durationMS,0,1)
+	this.val.size = this.val.stop - this.val.start
+	this.val.starttime = start
+	this.val.stoptime = stop
+	this.val.looptime = start - stop
+	this.transmit(this.val)
+	this.draw()
+}
+
+
+wavegrain.prototype.draw = function() {
+	//this.erase();
+
+	with (this.context) {
+		//bg
+		fillStyle = this.colors.fill;
+		fillRect(0,0,this.GUI.w,this.GUI.h);
+
+		//waveform
+		for (var i=0;i<this.buffer.length;i++) {
+			fillStyle = this.colors.black
+			this.waveTop = i*this.waveHeight;
+			this.waveCenter = this.waveTop + this.waveHeight/2
+			for (var j=0;j<this.buffer[i].length;j++) {
+				var ht1 = this.waveCenter - this.buffer[i][j][0]*this.waveHeight
+				var ht2 = this.waveCenter + Math.abs(this.buffer[i][j][1]*this.waveHeight)
+				ht2 = ht2 - ht1
+				fillRect( j*this.definition, ht1 , this.definition, ht2)
+			}
+			this.buffer[i]
+
+		}
+
+		//time bar - top
+		globalAlpha = 0.3
+		fillStyle = this.colors.border
+		fillRect(0,0,this.GUI.w,16)
+		globalAlpha = 1
+
+
+		textBaseline = "middle"
+		textAlign = "left"
+		fontSize = "8px"
+
+		//time lines
+		if (this.timescale) {
+			for (var i=1; i<this.durationMS/this.timescale.dur; i++) {
+				var x = (i * this.timescale.dur) / this.durationMS
+				x *= this.GUI.w
+				fillStyle = this.colors.border
+				fillRect(x,0,1,this.GUI.h)
+				fillStyle = this.colors.black
+				globalAlpha = 0.6
+				fillText(this.msToTime(i * this.timescale.dur,this.timescale.format),x+5,8)
+				globalAlpha = 1
+			}	
+		} 
+		
+
+		if (this.val.state=="on") {
+			// range selection
+			var x1 = this.val.start*this.GUI.w;
+			var y1 = this.val.level * this.GUI.h;
+			var x2 = this.val.stop*this.GUI.w;
+			var y2 = this.GUI.h;
+		   
+			fillStyle = this.colors.accent;
+			strokeStyle = this.colors.accent;
+			lineWidth = 2
+		
+			globalAlpha = 0.3	
+			beginPath()
+			//arc(x1,y1,x2-x1,0,Math.PI*2,false)
+			arc(x1,y1,30,0,Math.PI*2,false)
+			fill()
+			globalAlpha = 0.7
+			stroke()
+		
+		/*	globalAlpha = 0.1
+			fillRect(x1,0,x2-x1,y2);
+			globalAlpha = 0.3
+			strokeRect(x1,0,x2-x1,y2);
+			globalAlpha = 1
+			fillRect(x1,y1,x2-x1,y2-y1);
+			strokeRect(x1,y1,x2-x1,y2-y1); */
+			globalAlpha = 1
+		}
+
+		
+	}
+
+}
+
+wavegrain.prototype.msToTime = function(rawms,format) {
+
+  var format = format ? format : 2
+
+  var s = ~~(rawms / 1000)
+  var secs = s % 60;
+  s = (s - secs) / 60;
+  var mins = s % 60;
+  var hrs = (s - mins) / 60;
+  var ms = rawms % 1000
+
+  //correct digits
+  secs = (secs < 10 && mins) ? secs + '0' : secs;
+  //ms = (ms < 10 && secs) ? ms + '0' : ms;
+
+  if (format==1) {
+  	return secs + '.' + ms;
+  } else if (format==2) {
+  	return mins + ':' + secs + '.' + ms;
+  } else if (format==3) {
+  	return mins + ':' + secs;
+  }
+
+}
+
+wavegrain.prototype.click = function() {
+	if (this.durationMS) {
+		this.val.state = "on"
+		this.move();
+	//	this.tick();
+	//	this.interval = setInterval(this.tick.bind(this),this.val.looptime)
+	}
+}
+
+wavegrain.prototype.move = function() {
+
+	if (this.clickPos.x < 0) { this.clickPos.x = 0 }
+	if (this.clickPos.x > this.GUI.w) { this.clickPos.x = this.GUI.w }
+	if (this.clickPos.y < 0) { this.clickPos.y = 0 }
+	if (this.clickPos.y > this.GUI.h) { this.clickPos.y = this.GUI.h }
+
+	this.val.state = "on"
+	if (this.durationMS) {
+		this.val.start = this.clickPos.x/this.GUI.w - (this.val.looptime/this.durationMS)/2
+
+		this.val.size = this.val.looptime/this.durationMS
+
+	//	this.val.start = math.clip(this.val.start,0,1-this.val.size)
+
+		this.val.stop = this.val.start + this.val.size
+
+		this.val.starttime = Math.round(this.val.start * this.durationMS)
+		this.val.looptime = Math.round(this.val.size * this.durationMS)
+		this.val.stoptime = this.val.starttime + this.val.looptime
+
+		this.val.level = this.clickPos.y / this.GUI.h
+
+		this.transmit(this.val);
+	
+		this.draw();
+	}
+
+}
+
+
+wavegrain.prototype.release = function() {
+	this.val.state = "off"
+	this.transmit(this.val);
+	this.draw()
+//	clearInterval(this.interval)
+}
+
+wavegrain.prototype.tick = function() {
+	this.val.state = "on"
+	this.transmit(this.val);
+}
+},{"../core/widget":3,"../utils/math":6,"util":51}],46:[function(require,module,exports){
+var math = require('../utils/math')
+var util = require('util');
+var widget = require('../core/widget');
+
+/** 
+	@class windows      
+	Scalable windows
+	```html
+	<canvas nx="windows"></canvas>
+	```
+	<canvas nx="windows" style="margin-left:25px"></canvas>
+*/
+
+var windows = module.exports = function (target) {
+
+	this.defaultSize = { width: 200, height: 200 };
+
+	widget.call(this, target);
+
+	this.val = {
+		items: [],
+		add: false,
+		remove: false,
+		change: false
+	}
+
+	//this.val.items = []
+	this.size = .25;
+	this.meta = false;
+	this.resizing = false;
+	
+	this.init();
+
+	document.addEventListener('keydown',function(e) {
+		if (e.shiftKey && !this.meta) {
+			this.meta = true;
+			this.draw();
+		}
+	}.bind(this))
+	document.addEventListener('keyup',function(e) {
+		if (!e.shiftKey && this.meta) {
+			this.meta = false;
+			this.draw();
+		}
+	}.bind(this))
+}
+util.inherits(windows, widget);
+
+windows.prototype.init = function() {
+	this.draw();
+}
+
+windows.prototype.add = function(x,y,w,h) {
+	this.val.items.push({
+		x: x,
+		y: y,
+		w: w,
+		h: h
+	})
+	this.draw();
+}
+
+windows.prototype.setWindow = function(index, loc) {
+	this.val.items[index] = loc;
+	this.draw();
+}
+
+windows.prototype.remove = function(index) {
+	this.val.items.splice(index,1)
+	this.val.add = false
+	this.val.remove = index
+	this.val.change = false
+	/* this.val = {
+		remove: index,
+		items: this.val.items
+	} */
+	this.transmit(this.val)
+	this.draw();
+}
+
+windows.prototype.draw = function() {
+//	this.erase()
+	with (this.context) {
+
+		if (!this.meta) {
+			fillStyle = this.colors.fill;
+		} else {
+			fillStyle = this.colors.border;
+		}
+
+		fillRect(0,0,this.GUI.w,this.GUI.h);
+
+		globalAlpha = 0.8;
+	
+		for (var i=0;i<this.val.items.length;i++) {
+			fillStyle = this.colors.accent;
+			var x = this.val.items[i].x*this.GUI.w
+			var y = this.val.items[i].y*this.GUI.h
+			var w = this.val.items[i].w*this.GUI.w
+			var h = this.val.items[i].h*this.GUI.h
+			fillRect(x,y,w,h)
+		    
+			strokeStyle = this.colors.fill;
+			lineWidth = 1;
+		    strokeRect(x+w-10,y+h-10,10,10)
+		  //  strokeRect((this.val.items[i].x + this.val.items[i].w/2)*this.GUI.w - 10, (this.val.items[i].y + this.val.items[i].h/2)*this.GUI.h - 10,10,10)
+		}
+
+		globalAlpha = 1;
+
 	}
 	
-	// ==================== Event ==================== //
-	var Event = function(clock, deadline, func) {
-	  this.clock = clock
-	  this.func = func
-	  this._cleared = false // Flag used to clear an event inside callback
-	
-	  this.toleranceLate = clock.toleranceLate
-	  this.toleranceEarly = clock.toleranceEarly
-	  this._latestTime = null
-	  this._earliestTime = null
-	  this.deadline = null
-	  this.repeatTime = null
-	
-	  this.schedule(deadline)
-	}
-	
-	// Unschedules the event
-	Event.prototype.clear = function() {
-	  this.clock._removeEvent(this)
-	  this._cleared = true
-	  return this
-	}
-	
-	// Sets the event to repeat every `time` seconds.
-	Event.prototype.repeat = function(time) {
-	  if (time === 0)
-	    throw new Error('delay cannot be 0')
-	  this.repeatTime = time
-	  if (!this.clock._hasEvent(this))
-	    this.schedule(this.deadline + this.repeatTime)
-	  return this
-	}
-	
-	// Sets the time tolerance of the event.
-	// The event will be executed in the interval `[deadline - early, deadline + late]`
-	// If the clock fails to execute the event in time, the event will be dropped.
-	Event.prototype.tolerance = function(values) {
-	  if (typeof values.late === 'number')
-	    this.toleranceLate = values.late
-	  if (typeof values.early === 'number')
-	    this.toleranceEarly = values.early
-	  this._refreshEarlyLateDates()
-	  if (this.clock._hasEvent(this)) {
-	    this.clock._removeEvent(this)
-	    this.clock._insertEvent(this)
-	  }
-	  return this
-	}
-	
-	// Returns true if the event is repeated, false otherwise
-	Event.prototype.isRepeated = function() { return this.repeatTime !== null }
-	
-	// Schedules the event to be ran before `deadline`.
-	// If the time is within the event tolerance, we handle the event immediately.
-	// If the event was already scheduled at a different time, it is rescheduled.
-	Event.prototype.schedule = function(deadline) {
-	  this._cleared = false
-	  this.deadline = deadline
-	  this._refreshEarlyLateDates()
-	
-	  if (this.clock.context.currentTime >= this._earliestTime) {
-	    this._execute()
-	  
-	  } else if (this.clock._hasEvent(this)) {
-	    this.clock._removeEvent(this)
-	    this.clock._insertEvent(this)
-	  
-	  } else this.clock._insertEvent(this)
-	}
-	
-	Event.prototype.timeStretch = function(tRef, ratio) {
-	  if (this.isRepeated())
-	    this.repeatTime = this.repeatTime * ratio
-	
-	  var deadline = tRef + ratio * (this.deadline - tRef)
-	  // If the deadline is too close or past, and the event has a repeat,
-	  // we calculate the next repeat possible in the stretched space.
-	  if (this.isRepeated()) {
-	    while (this.clock.context.currentTime >= deadline - this.toleranceEarly)
-	      deadline += this.repeatTime
-	  }
-	  this.schedule(deadline)
-	}
-	
-	// Executes the event
-	Event.prototype._execute = function() {
-	  if (this.clock._started === false) return
-	  this.clock._removeEvent(this)
-	
-	  if (this.clock.context.currentTime < this._latestTime)
-	    this.func(this)
-	  else {
-	    if (this.onexpired) this.onexpired(this)
-	    console.warn('event expired')
-	  }
-	  // In the case `schedule` is called inside `func`, we need to avoid
-	  // overrwriting with yet another `schedule`.
-	  if (!this.clock._hasEvent(this) && this.isRepeated() && !this._cleared)
-	    this.schedule(this.deadline + this.repeatTime) 
-	}
-	
-	// Updates cached times
-	Event.prototype._refreshEarlyLateDates = function() {
-	  this._latestTime = this.deadline + this.toleranceLate
-	  this._earliestTime = this.deadline - this.toleranceEarly
-	}
-	
-	// ==================== WAAClock ==================== //
-	var WAAClock = module.exports = function(context, opts) {
-	  var self = this
-	  opts = opts || {}
-	  this.tickMethod = opts.tickMethod || 'ScriptProcessorNode'
-	  this.toleranceEarly = opts.toleranceEarly || CLOCK_DEFAULTS.toleranceEarly
-	  this.toleranceLate = opts.toleranceLate || CLOCK_DEFAULTS.toleranceLate
-	  this.context = context
-	  this._events = []
-	  this._started = false
-	}
-	
-	// ---------- Public API ---------- //
-	// Schedules `func` to run after `delay` seconds.
-	WAAClock.prototype.setTimeout = function(func, delay) {
-	  return this._createEvent(func, this._absTime(delay))
-	}
-	
-	// Schedules `func` to run before `deadline`.
-	WAAClock.prototype.callbackAtTime = function(func, deadline) {
-	  return this._createEvent(func, deadline)
-	}
-	
-	// Stretches `deadline` and `repeat` of all scheduled `events` by `ratio`, keeping
-	// their relative distance to `tRef`. In fact this is equivalent to changing the tempo.
-	WAAClock.prototype.timeStretch = function(tRef, events, ratio) {
-	  events.forEach(function(event) { event.timeStretch(tRef, ratio) })
-	  return events
-	}
-	
-	// Removes all scheduled events and starts the clock 
-	WAAClock.prototype.start = function() {
-	  if (this._started === false) {
-	    var self = this
-	    this._started = true
-	    this._events = []
-	
-	    if (this.tickMethod === 'ScriptProcessorNode') {
-	      var bufferSize = 256
-	      // We have to keep a reference to the node to avoid garbage collection
-	      this._clockNode = this.context.createScriptProcessor(bufferSize, 1, 1)
-	      this._clockNode.connect(this.context.destination)
-	      this._clockNode.onaudioprocess = function () {
-	        process.nextTick(function() { self._tick() })
-	      }
-	    } else if (this.tickMethod === 'manual') null // _tick is called manually
-	
-	    else throw new Error('invalid tickMethod ' + this.tickMethod)
-	  }
-	}
-	
-	// Stops the clock
-	WAAClock.prototype.stop = function() {
-	  if (this._started === true) {
-	    this._started = false
-	    this._clockNode.disconnect()
-	  }  
-	}
-	
-	// ---------- Private ---------- //
-	
-	// This function is ran periodically, and at each tick it executes
-	// events for which `currentTime` is included in their tolerance interval.
-	WAAClock.prototype._tick = function() {
-	  var event = this._events.shift()
-	
-	  while(event && event._earliestTime <= this.context.currentTime) {
-	    event._execute()
-	    event = this._events.shift()
-	  }
-	
-	  // Put back the last event
-	  if(event) this._events.unshift(event)
-	}
-	
-	// Creates an event and insert it to the list
-	WAAClock.prototype._createEvent = function(func, deadline) {
-	  return new Event(this, deadline, func)
-	}
-	
-	// Inserts an event to the list
-	WAAClock.prototype._insertEvent = function(event) {
-	  this._events.splice(this._indexByTime(event._earliestTime), 0, event)
-	}
-	
-	// Removes an event from the list
-	WAAClock.prototype._removeEvent = function(event) {
-	  var ind = this._events.indexOf(event)
-	  if (ind !== -1) this._events.splice(ind, 1)
-	}
-	
-	// Returns true if `event` is in queue, false otherwise
-	WAAClock.prototype._hasEvent = function(event) {
-	 return this._events.indexOf(event) !== -1
-	}
-	
-	// Returns the index of the first event whose deadline is >= to `deadline`
-	WAAClock.prototype._indexByTime = function(deadline) {
-	  // performs a binary search
-	  var low = 0
-	    , high = this._events.length
-	    , mid
-	  while (low < high) {
-	    mid = Math.floor((low + high) / 2)
-	    if (this._events[mid]._earliestTime < deadline)
-	      low = mid + 1
-	    else high = mid
-	  }
-	  return low
-	}
-	
-	// Converts from relative time to absolute time
-	WAAClock.prototype._absTime = function(relTime) {
-	  return relTime + this.context.currentTime
-	}
-	
-	// Converts from absolute time to relative time 
-	WAAClock.prototype._relTime = function(absTime) {
-	  return absTime - this.context.currentTime
-	}
-	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(43)))
+	this.drawLabel();
+}
 
-/***/ }),
-/* 43 */
-/***/ (function(module, exports) {
+windows.prototype.click = function() {
 
-	// shim for using process in browser
-	var process = module.exports = {};
-	
-	// cached from whatever global is present so that test runners that stub it
-	// don't break things.  But we need to wrap it in a try catch in case it is
-	// wrapped in strict mode code which doesn't define any globals.  It's inside a
-	// function because try/catches deoptimize in certain engines.
-	
-	var cachedSetTimeout;
-	var cachedClearTimeout;
-	
-	function defaultSetTimout() {
-	    throw new Error('setTimeout has not been defined');
+	this.holds = false;
+	var cx = this.clickPos.x / this.GUI.w;
+	var cy = this.clickPos.y / this.GUI.h;
+	for (var i=0;i<this.val.items.length;i++) {
+		if (nx.isInside({ x: cx, y: cy }, this.val.items[i])) {
+			this.holds = i;
+			if (this.clickPos.x > (this.val.items[i].x+this.val.items[i].w)*this.GUI.w - 10 && this.clickPos.x < (this.val.items[i].x+this.val.items[i].w)*this.GUI.w && this.clickPos.y > (this.val.items[i].y+this.val.items[i].h)*this.GUI.h - 10 && this.clickPos.y < (this.val.items[i].y+this.val.items[i].h)*this.GUI.h) {
+				this.resizing = true;
+			}
+		}
 	}
-	function defaultClearTimeout () {
-	    throw new Error('clearTimeout has not been defined');
+
+	if (this.holds===false) {
+		this.val.items.push({
+			x: cx,
+			y: cy,
+			w: this.size,
+			h: this.size
+		})
+		this.holds = this.val.items.length-1;
+		this.hasMoved = true;
+		this.val.add = this.val.items[this.holds]
+		this.val.remove = false
+		this.val.change = false
+		/* this.val = {
+			add: this.val.items[this.holds],
+			items: this.val.items
+		} */
+		this.transmit(this.val)
 	}
-	(function () {
-	    try {
-	        if (typeof setTimeout === 'function') {
-	            cachedSetTimeout = setTimeout;
-	        } else {
-	            cachedSetTimeout = defaultSetTimout;
-	        }
-	    } catch (e) {
-	        cachedSetTimeout = defaultSetTimout;
-	    }
-	    try {
-	        if (typeof clearTimeout === 'function') {
-	            cachedClearTimeout = clearTimeout;
-	        } else {
-	            cachedClearTimeout = defaultClearTimeout;
-	        }
-	    } catch (e) {
-	        cachedClearTimeout = defaultClearTimeout;
-	    }
-	} ())
-	function runTimeout(fun) {
-	    if (cachedSetTimeout === setTimeout) {
-	        //normal enviroments in sane situations
-	        return setTimeout(fun, 0);
-	    }
-	    // if setTimeout wasn't available but was latter defined
-	    if ((cachedSetTimeout === defaultSetTimout || !cachedSetTimeout) && setTimeout) {
-	        cachedSetTimeout = setTimeout;
-	        return setTimeout(fun, 0);
-	    }
-	    try {
-	        // when when somebody has screwed with setTimeout but no I.E. maddness
-	        return cachedSetTimeout(fun, 0);
-	    } catch(e){
-	        try {
-	            // When we are in I.E. but the script has been evaled so I.E. doesn't trust the global object when called normally
-	            return cachedSetTimeout.call(null, fun, 0);
-	        } catch(e){
-	            // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error
-	            return cachedSetTimeout.call(this, fun, 0);
-	        }
-	    }
-	
-	
+	if (this.meta) {
+		for (var i=0;i<this.val.items.length;i++) {
+			this.val.items[i].tx = this.val.items[i].x
+			this.val.items[i].ty = this.val.items[i].y
+		}
+		this.tx = cx
+		this.ty = cy
 	}
-	function runClearTimeout(marker) {
-	    if (cachedClearTimeout === clearTimeout) {
-	        //normal enviroments in sane situations
-	        return clearTimeout(marker);
-	    }
-	    // if clearTimeout wasn't available but was latter defined
-	    if ((cachedClearTimeout === defaultClearTimeout || !cachedClearTimeout) && clearTimeout) {
-	        cachedClearTimeout = clearTimeout;
-	        return clearTimeout(marker);
-	    }
-	    try {
-	        // when when somebody has screwed with setTimeout but no I.E. maddness
-	        return cachedClearTimeout(marker);
-	    } catch (e){
-	        try {
-	            // When we are in I.E. but the script has been evaled so I.E. doesn't  trust the global object when called normally
-	            return cachedClearTimeout.call(null, marker);
-	        } catch (e){
-	            // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error.
-	            // Some versions of I.E. have different rules for clearTimeout vs setTimeout
-	            return cachedClearTimeout.call(this, marker);
-	        }
-	    }
-	
-	
-	
+	this.draw();
+}
+
+windows.prototype.move = function() {
+	var cx = this.clickPos.x / this.GUI.w;
+	var cy = this.clickPos.y / this.GUI.h;
+	if (this.resizing) {
+		if (!this.meta) {
+			this.val.items[this.holds].w = cx - this.val.items[this.holds].x
+			this.val.items[this.holds].h = cy - this.val.items[this.holds].y
+			this.val.items[this.holds] = this.restrict(this.val.items[this.holds])
+		} else {
+			for (var i=0;i<this.val.items.length;i++) {
+				this.val.items[i].w = cx - this.val.items[this.holds].x
+				this.val.items[i].h = cy - this.val.items[this.holds].y
+				this.val.items[i] = this.restrict(this.val.items[i])
+			}
+		}
+	} else {
+		if (!this.meta) {
+			this.val.items[this.holds].x = cx;
+			this.val.items[this.holds].y = cy;	
+			this.val.items[this.holds] = this.restrict(this.val.items[this.holds])
+		} else {
+			for (var i=0;i<this.val.items.length;i++) {
+				this.val.items[i].x = (cx - this.tx) + this.val.items[i].tx;
+				this.val.items[i].y = (cy - this.ty) + this.val.items[i].ty;
+				this.val.items[i] = this.restrict(this.val.items[i])	
+			}
+		}	
 	}
-	var queue = [];
-	var draining = false;
-	var currentQueue;
-	var queueIndex = -1;
-	
-	function cleanUpNextTick() {
-	    if (!draining || !currentQueue) {
-	        return;
-	    }
-	    draining = false;
-	    if (currentQueue.length) {
-	        queue = currentQueue.concat(queue);
-	    } else {
-	        queueIndex = -1;
-	    }
-	    if (queue.length) {
-	        drainQueue();
-	    }
-	}
-	
-	function drainQueue() {
-	    if (draining) {
-	        return;
-	    }
-	    var timeout = runTimeout(cleanUpNextTick);
-	    draining = true;
-	
-	    var len = queue.length;
-	    while(len) {
-	        currentQueue = queue;
-	        queue = [];
-	        while (++queueIndex < len) {
-	            if (currentQueue) {
-	                currentQueue[queueIndex].run();
-	            }
-	        }
-	        queueIndex = -1;
-	        len = queue.length;
-	    }
-	    currentQueue = null;
-	    draining = false;
-	    runClearTimeout(timeout);
-	}
-	
-	process.nextTick = function (fun) {
-	    var args = new Array(arguments.length - 1);
-	    if (arguments.length > 1) {
-	        for (var i = 1; i < arguments.length; i++) {
-	            args[i - 1] = arguments[i];
-	        }
-	    }
-	    queue.push(new Item(fun, args));
-	    if (queue.length === 1 && !draining) {
-	        runTimeout(drainQueue);
-	    }
-	};
-	
-	// v8 likes predictible objects
-	function Item(fun, array) {
-	    this.fun = fun;
-	    this.array = array;
-	}
-	Item.prototype.run = function () {
-	    this.fun.apply(null, this.array);
-	};
-	process.title = 'browser';
-	process.browser = true;
-	process.env = {};
-	process.argv = [];
-	process.version = ''; // empty string to avoid regexp issues
-	process.versions = {};
-	
-	function noop() {}
-	
-	process.on = noop;
-	process.addListener = noop;
-	process.once = noop;
-	process.off = noop;
-	process.removeListener = noop;
-	process.removeAllListeners = noop;
-	process.emit = noop;
-	process.prependListener = noop;
-	process.prependOnceListener = noop;
-	
-	process.listeners = function (name) { return [] }
-	
-	process.binding = function (name) {
-	    throw new Error('process.binding is not supported');
-	};
-	
-	process.cwd = function () { return '/' };
-	process.chdir = function (dir) {
-	    throw new Error('process.chdir is not supported');
-	};
-	process.umask = function() { return 0; };
 
 
-/***/ }),
-/* 44 */
-/***/ (function(module, exports, __webpack_require__) {
+	
+	this.val.change = true;
+	this.val.add = false;
+	this.val.remove = false;
+	/*this.val = {
+		change: true,
+		items: this.val.items
+	} */
+	this.transmit(this.val)
+	this.draw();
+}
 
-	"use strict";
-	
-	var _createClass = (function () { function defineProperties(target, props) { for (var key in props) { var prop = props[key]; prop.configurable = true; if (prop.value) prop.writable = true; } Object.defineProperties(target, props); } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-	
-	var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } };
-	
-	var clock = __webpack_require__(1).clock;
-	
-	var Interval = (function () {
-	  function Interval(rate, func, on) {
-	    _classCallCheck(this, Interval);
-	
-	    this.rate = rate;
-	    this.on = on;
-	    this.clock = clock(); // jshint ignore:line
-	
-	    this.pattern = [1];
-	    this.index = 0;
-	
-	    this.event = func ? func : function () {};
-	
-	    if (this.on) {
-	      this.start();
-	    }
-	  }
-	
-	  _createClass(Interval, {
-	    _event: {
-	      value: function _event(e) {
-	        //  if (this.pattern[this.index%this.pattern.length]) {
-	        this.event(e);
-	        //  }
-	        this.index++;
-	      }
-	    },
-	    stop: {
-	      value: function stop() {
-	        this.on = false;
-	        this.interval.clear();
-	      }
-	    },
-	    start: {
-	      value: function start() {
-	        this.on = true;
-	        this.interval = this.clock.callbackAtTime(this._event.bind(this), this.clock.context.currentTime).repeat(this.rate / 1000).tolerance({ early: 0.1, late: 1 });
-	      }
-	    },
-	    ms: {
-	      value: function ms(newrate) {
-	        if (this.on) {
-	          var ratio = newrate / this.rate;
-	          this.rate = newrate;
-	          this.clock.timeStretch(this.clock.context.currentTime, [this.interval], ratio);
-	        } else {
-	          this.rate = newrate;
-	        }
-	      }
-	    }
-	  });
-	
-	  return Interval;
-	})();
-	
-	module.exports = Interval;
+windows.prototype.release = function() {
+	if (!this.hasMoved) {
+		if (this.meta) {
+			this.val.add = false
+			this.val.remove = "all"
+			this.val.change = false
+			/*this.val = {
+				remove: "all",
+				items: this.val.items
+			} */
+			this.val.items = []
+		} else {
+			this.val.add = false
+			this.val.remove = this.holds
+			this.val.change = false
+		/*	this.val = {
+				remove: this.holds,
+				items: this.val.items
+			} */
+			this.val.items.splice(this.holds,1)
+		}
+	}
+	this.resizing = false;
+	this.transmit(this.val);
+	this.draw();
+}
 
-/***/ })
-/******/ ])
-});
-;
-//# sourceMappingURL=NexusUI.map
+windows.prototype.restrict = function(item) {
+	if (item.x < 0) {
+		item.x = 0
+	}
+	if (item.y < 0) {
+		item.y = 0
+	}
+	if (item.x + item.w > 1) {
+		item.x = 1 - item.w
+	}
+	if (item.y + item.h > 1) {
+		item.y = 1 - item.h
+	}	
+	return item;
+}
+},{"../core/widget":3,"../utils/math":6,"util":51}],47:[function(require,module,exports){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+function EventEmitter() {
+  this._events = this._events || {};
+  this._maxListeners = this._maxListeners || undefined;
+}
+module.exports = EventEmitter;
+
+// Backwards-compat with node 0.10.x
+EventEmitter.EventEmitter = EventEmitter;
+
+EventEmitter.prototype._events = undefined;
+EventEmitter.prototype._maxListeners = undefined;
+
+// By default EventEmitters will print a warning if more than 10 listeners are
+// added to it. This is a useful default which helps finding memory leaks.
+EventEmitter.defaultMaxListeners = 10;
+
+// Obviously not all Emitters should be limited to 10. This function allows
+// that to be increased. Set to zero for unlimited.
+EventEmitter.prototype.setMaxListeners = function(n) {
+  if (!isNumber(n) || n < 0 || isNaN(n))
+    throw TypeError('n must be a positive number');
+  this._maxListeners = n;
+  return this;
+};
+
+EventEmitter.prototype.emit = function(type) {
+  var er, handler, len, args, i, listeners;
+
+  if (!this._events)
+    this._events = {};
+
+  // If there is no 'error' event listener then throw.
+  if (type === 'error') {
+    if (!this._events.error ||
+        (isObject(this._events.error) && !this._events.error.length)) {
+      er = arguments[1];
+      if (er instanceof Error) {
+        throw er; // Unhandled 'error' event
+      }
+      throw TypeError('Uncaught, unspecified "error" event.');
+    }
+  }
+
+  handler = this._events[type];
+
+  if (isUndefined(handler))
+    return false;
+
+  if (isFunction(handler)) {
+    switch (arguments.length) {
+      // fast cases
+      case 1:
+        handler.call(this);
+        break;
+      case 2:
+        handler.call(this, arguments[1]);
+        break;
+      case 3:
+        handler.call(this, arguments[1], arguments[2]);
+        break;
+      // slower
+      default:
+        len = arguments.length;
+        args = new Array(len - 1);
+        for (i = 1; i < len; i++)
+          args[i - 1] = arguments[i];
+        handler.apply(this, args);
+    }
+  } else if (isObject(handler)) {
+    len = arguments.length;
+    args = new Array(len - 1);
+    for (i = 1; i < len; i++)
+      args[i - 1] = arguments[i];
+
+    listeners = handler.slice();
+    len = listeners.length;
+    for (i = 0; i < len; i++)
+      listeners[i].apply(this, args);
+  }
+
+  return true;
+};
+
+EventEmitter.prototype.addListener = function(type, listener) {
+  var m;
+
+  if (!isFunction(listener))
+    throw TypeError('listener must be a function');
+
+  if (!this._events)
+    this._events = {};
+
+  // To avoid recursion in the case that type === "newListener"! Before
+  // adding it to the listeners, first emit "newListener".
+  if (this._events.newListener)
+    this.emit('newListener', type,
+              isFunction(listener.listener) ?
+              listener.listener : listener);
+
+  if (!this._events[type])
+    // Optimize the case of one listener. Don't need the extra array object.
+    this._events[type] = listener;
+  else if (isObject(this._events[type]))
+    // If we've already got an array, just append.
+    this._events[type].push(listener);
+  else
+    // Adding the second element, need to change to array.
+    this._events[type] = [this._events[type], listener];
+
+  // Check for listener leak
+  if (isObject(this._events[type]) && !this._events[type].warned) {
+    var m;
+    if (!isUndefined(this._maxListeners)) {
+      m = this._maxListeners;
+    } else {
+      m = EventEmitter.defaultMaxListeners;
+    }
+
+    if (m && m > 0 && this._events[type].length > m) {
+      this._events[type].warned = true;
+      console.error('(node) warning: possible EventEmitter memory ' +
+                    'leak detected. %d listeners added. ' +
+                    'Use emitter.setMaxListeners() to increase limit.',
+                    this._events[type].length);
+      if (typeof console.trace === 'function') {
+        // not supported in IE 10
+        console.trace();
+      }
+    }
+  }
+
+  return this;
+};
+
+EventEmitter.prototype.on = EventEmitter.prototype.addListener;
+
+EventEmitter.prototype.once = function(type, listener) {
+  if (!isFunction(listener))
+    throw TypeError('listener must be a function');
+
+  var fired = false;
+
+  function g() {
+    this.removeListener(type, g);
+
+    if (!fired) {
+      fired = true;
+      listener.apply(this, arguments);
+    }
+  }
+
+  g.listener = listener;
+  this.on(type, g);
+
+  return this;
+};
+
+// emits a 'removeListener' event iff the listener was removed
+EventEmitter.prototype.removeListener = function(type, listener) {
+  var list, position, length, i;
+
+  if (!isFunction(listener))
+    throw TypeError('listener must be a function');
+
+  if (!this._events || !this._events[type])
+    return this;
+
+  list = this._events[type];
+  length = list.length;
+  position = -1;
+
+  if (list === listener ||
+      (isFunction(list.listener) && list.listener === listener)) {
+    delete this._events[type];
+    if (this._events.removeListener)
+      this.emit('removeListener', type, listener);
+
+  } else if (isObject(list)) {
+    for (i = length; i-- > 0;) {
+      if (list[i] === listener ||
+          (list[i].listener && list[i].listener === listener)) {
+        position = i;
+        break;
+      }
+    }
+
+    if (position < 0)
+      return this;
+
+    if (list.length === 1) {
+      list.length = 0;
+      delete this._events[type];
+    } else {
+      list.splice(position, 1);
+    }
+
+    if (this._events.removeListener)
+      this.emit('removeListener', type, listener);
+  }
+
+  return this;
+};
+
+EventEmitter.prototype.removeAllListeners = function(type) {
+  var key, listeners;
+
+  if (!this._events)
+    return this;
+
+  // not listening for removeListener, no need to emit
+  if (!this._events.removeListener) {
+    if (arguments.length === 0)
+      this._events = {};
+    else if (this._events[type])
+      delete this._events[type];
+    return this;
+  }
+
+  // emit removeListener for all listeners on all events
+  if (arguments.length === 0) {
+    for (key in this._events) {
+      if (key === 'removeListener') continue;
+      this.removeAllListeners(key);
+    }
+    this.removeAllListeners('removeListener');
+    this._events = {};
+    return this;
+  }
+
+  listeners = this._events[type];
+
+  if (isFunction(listeners)) {
+    this.removeListener(type, listeners);
+  } else {
+    // LIFO order
+    while (listeners.length)
+      this.removeListener(type, listeners[listeners.length - 1]);
+  }
+  delete this._events[type];
+
+  return this;
+};
+
+EventEmitter.prototype.listeners = function(type) {
+  var ret;
+  if (!this._events || !this._events[type])
+    ret = [];
+  else if (isFunction(this._events[type]))
+    ret = [this._events[type]];
+  else
+    ret = this._events[type].slice();
+  return ret;
+};
+
+EventEmitter.listenerCount = function(emitter, type) {
+  var ret;
+  if (!emitter._events || !emitter._events[type])
+    ret = 0;
+  else if (isFunction(emitter._events[type]))
+    ret = 1;
+  else
+    ret = emitter._events[type].length;
+  return ret;
+};
+
+function isFunction(arg) {
+  return typeof arg === 'function';
+}
+
+function isNumber(arg) {
+  return typeof arg === 'number';
+}
+
+function isObject(arg) {
+  return typeof arg === 'object' && arg !== null;
+}
+
+function isUndefined(arg) {
+  return arg === void 0;
+}
+
+},{}],48:[function(require,module,exports){
+if (typeof Object.create === 'function') {
+  // implementation from standard node.js 'util' module
+  module.exports = function inherits(ctor, superCtor) {
+    ctor.super_ = superCtor
+    ctor.prototype = Object.create(superCtor.prototype, {
+      constructor: {
+        value: ctor,
+        enumerable: false,
+        writable: true,
+        configurable: true
+      }
+    });
+  };
+} else {
+  // old school shim for old browsers
+  module.exports = function inherits(ctor, superCtor) {
+    ctor.super_ = superCtor
+    var TempCtor = function () {}
+    TempCtor.prototype = superCtor.prototype
+    ctor.prototype = new TempCtor()
+    ctor.prototype.constructor = ctor
+  }
+}
+
+},{}],49:[function(require,module,exports){
+// shim for using process in browser
+
+var process = module.exports = {};
+
+process.nextTick = (function () {
+    var canSetImmediate = typeof window !== 'undefined'
+    && window.setImmediate;
+    var canPost = typeof window !== 'undefined'
+    && window.postMessage && window.addEventListener
+    ;
+
+    if (canSetImmediate) {
+        return function (f) { return window.setImmediate(f) };
+    }
+
+    if (canPost) {
+        var queue = [];
+        window.addEventListener('message', function (ev) {
+            var source = ev.source;
+            if ((source === window || source === null) && ev.data === 'process-tick') {
+                ev.stopPropagation();
+                if (queue.length > 0) {
+                    var fn = queue.shift();
+                    fn();
+                }
+            }
+        }, true);
+
+        return function nextTick(fn) {
+            queue.push(fn);
+            window.postMessage('process-tick', '*');
+        };
+    }
+
+    return function nextTick(fn) {
+        setTimeout(fn, 0);
+    };
+})();
+
+process.title = 'browser';
+process.browser = true;
+process.env = {};
+process.argv = [];
+
+function noop() {}
+
+process.on = noop;
+process.addListener = noop;
+process.once = noop;
+process.off = noop;
+process.removeListener = noop;
+process.removeAllListeners = noop;
+process.emit = noop;
+
+process.binding = function (name) {
+    throw new Error('process.binding is not supported');
+}
+
+// TODO(shtylman)
+process.cwd = function () { return '/' };
+process.chdir = function (dir) {
+    throw new Error('process.chdir is not supported');
+};
+
+},{}],50:[function(require,module,exports){
+module.exports = function isBuffer(arg) {
+  return arg && typeof arg === 'object'
+    && typeof arg.copy === 'function'
+    && typeof arg.fill === 'function'
+    && typeof arg.readUInt8 === 'function';
+}
+},{}],51:[function(require,module,exports){
+(function (process,global){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+var formatRegExp = /%[sdj%]/g;
+exports.format = function(f) {
+  if (!isString(f)) {
+    var objects = [];
+    for (var i = 0; i < arguments.length; i++) {
+      objects.push(inspect(arguments[i]));
+    }
+    return objects.join(' ');
+  }
+
+  var i = 1;
+  var args = arguments;
+  var len = args.length;
+  var str = String(f).replace(formatRegExp, function(x) {
+    if (x === '%%') return '%';
+    if (i >= len) return x;
+    switch (x) {
+      case '%s': return String(args[i++]);
+      case '%d': return Number(args[i++]);
+      case '%j':
+        try {
+          return JSON.stringify(args[i++]);
+        } catch (_) {
+          return '[Circular]';
+        }
+      default:
+        return x;
+    }
+  });
+  for (var x = args[i]; i < len; x = args[++i]) {
+    if (isNull(x) || !isObject(x)) {
+      str += ' ' + x;
+    } else {
+      str += ' ' + inspect(x);
+    }
+  }
+  return str;
+};
+
+
+// Mark that a method should not be used.
+// Returns a modified function which warns once by default.
+// If --no-deprecation is set, then it is a no-op.
+exports.deprecate = function(fn, msg) {
+  // Allow for deprecating things in the process of starting up.
+  if (isUndefined(global.process)) {
+    return function() {
+      return exports.deprecate(fn, msg).apply(this, arguments);
+    };
+  }
+
+  if (process.noDeprecation === true) {
+    return fn;
+  }
+
+  var warned = false;
+  function deprecated() {
+    if (!warned) {
+      if (process.throwDeprecation) {
+        throw new Error(msg);
+      } else if (process.traceDeprecation) {
+        console.trace(msg);
+      } else {
+        console.error(msg);
+      }
+      warned = true;
+    }
+    return fn.apply(this, arguments);
+  }
+
+  return deprecated;
+};
+
+
+var debugs = {};
+var debugEnviron;
+exports.debuglog = function(set) {
+  if (isUndefined(debugEnviron))
+    debugEnviron = process.env.NODE_DEBUG || '';
+  set = set.toUpperCase();
+  if (!debugs[set]) {
+    if (new RegExp('\\b' + set + '\\b', 'i').test(debugEnviron)) {
+      var pid = process.pid;
+      debugs[set] = function() {
+        var msg = exports.format.apply(exports, arguments);
+        console.error('%s %d: %s', set, pid, msg);
+      };
+    } else {
+      debugs[set] = function() {};
+    }
+  }
+  return debugs[set];
+};
+
+
+/**
+ * Echos the value of a value. Trys to print the value out
+ * in the best way possible given the different types.
+ *
+ */
+/* legacy: obj, showHidden, depth, colors*/
+function inspect(obj, opts) {
+  // default options
+  var ctx = {
+    seen: [],
+    stylize: stylizeNoColor
+  };
+  // legacy...
+  if (arguments.length >= 3) ctx.depth = arguments[2];
+  if (arguments.length >= 4) ctx.colors = arguments[3];
+  if (isBoolean(opts)) {
+    // legacy...
+    ctx.showHidden = opts;
+  } else if (opts) {
+    // got an "options" object
+    exports._extend(ctx, opts);
+  }
+  // set default options
+  if (isUndefined(ctx.showHidden)) ctx.showHidden = false;
+  if (isUndefined(ctx.depth)) ctx.depth = 2;
+  if (isUndefined(ctx.colors)) ctx.colors = false;
+  if (isUndefined(ctx.customInspect)) ctx.customInspect = true;
+  if (ctx.colors) ctx.stylize = stylizeWithColor;
+  return formatValue(ctx, obj, ctx.depth);
+}
+exports.inspect = inspect;
+
+
+// http://en.wikipedia.org/wiki/ANSI_escape_code#graphics
+inspect.colors = {
+  'bold' : [1, 22],
+  'italic' : [3, 23],
+  'underline' : [4, 24],
+  'inverse' : [7, 27],
+  'white' : [37, 39],
+  'grey' : [90, 39],
+  'black' : [30, 39],
+  'blue' : [34, 39],
+  'cyan' : [36, 39],
+  'green' : [32, 39],
+  'magenta' : [35, 39],
+  'red' : [31, 39],
+  'yellow' : [33, 39]
+};
+
+// Don't use 'blue' not visible on cmd.exe
+inspect.styles = {
+  'special': 'cyan',
+  'number': 'yellow',
+  'boolean': 'yellow',
+  'undefined': 'grey',
+  'null': 'bold',
+  'string': 'green',
+  'date': 'magenta',
+  // "name": intentionally not styling
+  'regexp': 'red'
+};
+
+
+function stylizeWithColor(str, styleType) {
+  var style = inspect.styles[styleType];
+
+  if (style) {
+    return '\u001b[' + inspect.colors[style][0] + 'm' + str +
+           '\u001b[' + inspect.colors[style][1] + 'm';
+  } else {
+    return str;
+  }
+}
+
+
+function stylizeNoColor(str, styleType) {
+  return str;
+}
+
+
+function arrayToHash(array) {
+  var hash = {};
+
+  array.forEach(function(val, idx) {
+    hash[val] = true;
+  });
+
+  return hash;
+}
+
+
+function formatValue(ctx, value, recurseTimes) {
+  // Provide a hook for user-specified inspect functions.
+  // Check that value is an object with an inspect function on it
+  if (ctx.customInspect &&
+      value &&
+      isFunction(value.inspect) &&
+      // Filter out the util module, it's inspect function is special
+      value.inspect !== exports.inspect &&
+      // Also filter out any prototype objects using the circular check.
+      !(value.constructor && value.constructor.prototype === value)) {
+    var ret = value.inspect(recurseTimes, ctx);
+    if (!isString(ret)) {
+      ret = formatValue(ctx, ret, recurseTimes);
+    }
+    return ret;
+  }
+
+  // Primitive types cannot have properties
+  var primitive = formatPrimitive(ctx, value);
+  if (primitive) {
+    return primitive;
+  }
+
+  // Look up the keys of the object.
+  var keys = Object.keys(value);
+  var visibleKeys = arrayToHash(keys);
+
+  if (ctx.showHidden) {
+    keys = Object.getOwnPropertyNames(value);
+  }
+
+  // IE doesn't make error fields non-enumerable
+  // http://msdn.microsoft.com/en-us/library/ie/dww52sbt(v=vs.94).aspx
+  if (isError(value)
+      && (keys.indexOf('message') >= 0 || keys.indexOf('description') >= 0)) {
+    return formatError(value);
+  }
+
+  // Some type of object without properties can be shortcutted.
+  if (keys.length === 0) {
+    if (isFunction(value)) {
+      var name = value.name ? ': ' + value.name : '';
+      return ctx.stylize('[Function' + name + ']', 'special');
+    }
+    if (isRegExp(value)) {
+      return ctx.stylize(RegExp.prototype.toString.call(value), 'regexp');
+    }
+    if (isDate(value)) {
+      return ctx.stylize(Date.prototype.toString.call(value), 'date');
+    }
+    if (isError(value)) {
+      return formatError(value);
+    }
+  }
+
+  var base = '', array = false, braces = ['{', '}'];
+
+  // Make Array say that they are Array
+  if (isArray(value)) {
+    array = true;
+    braces = ['[', ']'];
+  }
+
+  // Make functions say that they are functions
+  if (isFunction(value)) {
+    var n = value.name ? ': ' + value.name : '';
+    base = ' [Function' + n + ']';
+  }
+
+  // Make RegExps say that they are RegExps
+  if (isRegExp(value)) {
+    base = ' ' + RegExp.prototype.toString.call(value);
+  }
+
+  // Make dates with properties first say the date
+  if (isDate(value)) {
+    base = ' ' + Date.prototype.toUTCString.call(value);
+  }
+
+  // Make error with message first say the error
+  if (isError(value)) {
+    base = ' ' + formatError(value);
+  }
+
+  if (keys.length === 0 && (!array || value.length == 0)) {
+    return braces[0] + base + braces[1];
+  }
+
+  if (recurseTimes < 0) {
+    if (isRegExp(value)) {
+      return ctx.stylize(RegExp.prototype.toString.call(value), 'regexp');
+    } else {
+      return ctx.stylize('[Object]', 'special');
+    }
+  }
+
+  ctx.seen.push(value);
+
+  var output;
+  if (array) {
+    output = formatArray(ctx, value, recurseTimes, visibleKeys, keys);
+  } else {
+    output = keys.map(function(key) {
+      return formatProperty(ctx, value, recurseTimes, visibleKeys, key, array);
+    });
+  }
+
+  ctx.seen.pop();
+
+  return reduceToSingleString(output, base, braces);
+}
+
+
+function formatPrimitive(ctx, value) {
+  if (isUndefined(value))
+    return ctx.stylize('undefined', 'undefined');
+  if (isString(value)) {
+    var simple = '\'' + JSON.stringify(value).replace(/^"|"$/g, '')
+                                             .replace(/'/g, "\\'")
+                                             .replace(/\\"/g, '"') + '\'';
+    return ctx.stylize(simple, 'string');
+  }
+  if (isNumber(value))
+    return ctx.stylize('' + value, 'number');
+  if (isBoolean(value))
+    return ctx.stylize('' + value, 'boolean');
+  // For some reason typeof null is "object", so special case here.
+  if (isNull(value))
+    return ctx.stylize('null', 'null');
+}
+
+
+function formatError(value) {
+  return '[' + Error.prototype.toString.call(value) + ']';
+}
+
+
+function formatArray(ctx, value, recurseTimes, visibleKeys, keys) {
+  var output = [];
+  for (var i = 0, l = value.length; i < l; ++i) {
+    if (hasOwnProperty(value, String(i))) {
+      output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
+          String(i), true));
+    } else {
+      output.push('');
+    }
+  }
+  keys.forEach(function(key) {
+    if (!key.match(/^\d+$/)) {
+      output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
+          key, true));
+    }
+  });
+  return output;
+}
+
+
+function formatProperty(ctx, value, recurseTimes, visibleKeys, key, array) {
+  var name, str, desc;
+  desc = Object.getOwnPropertyDescriptor(value, key) || { value: value[key] };
+  if (desc.get) {
+    if (desc.set) {
+      str = ctx.stylize('[Getter/Setter]', 'special');
+    } else {
+      str = ctx.stylize('[Getter]', 'special');
+    }
+  } else {
+    if (desc.set) {
+      str = ctx.stylize('[Setter]', 'special');
+    }
+  }
+  if (!hasOwnProperty(visibleKeys, key)) {
+    name = '[' + key + ']';
+  }
+  if (!str) {
+    if (ctx.seen.indexOf(desc.value) < 0) {
+      if (isNull(recurseTimes)) {
+        str = formatValue(ctx, desc.value, null);
+      } else {
+        str = formatValue(ctx, desc.value, recurseTimes - 1);
+      }
+      if (str.indexOf('\n') > -1) {
+        if (array) {
+          str = str.split('\n').map(function(line) {
+            return '  ' + line;
+          }).join('\n').substr(2);
+        } else {
+          str = '\n' + str.split('\n').map(function(line) {
+            return '   ' + line;
+          }).join('\n');
+        }
+      }
+    } else {
+      str = ctx.stylize('[Circular]', 'special');
+    }
+  }
+  if (isUndefined(name)) {
+    if (array && key.match(/^\d+$/)) {
+      return str;
+    }
+    name = JSON.stringify('' + key);
+    if (name.match(/^"([a-zA-Z_][a-zA-Z_0-9]*)"$/)) {
+      name = name.substr(1, name.length - 2);
+      name = ctx.stylize(name, 'name');
+    } else {
+      name = name.replace(/'/g, "\\'")
+                 .replace(/\\"/g, '"')
+                 .replace(/(^"|"$)/g, "'");
+      name = ctx.stylize(name, 'string');
+    }
+  }
+
+  return name + ': ' + str;
+}
+
+
+function reduceToSingleString(output, base, braces) {
+  var numLinesEst = 0;
+  var length = output.reduce(function(prev, cur) {
+    numLinesEst++;
+    if (cur.indexOf('\n') >= 0) numLinesEst++;
+    return prev + cur.replace(/\u001b\[\d\d?m/g, '').length + 1;
+  }, 0);
+
+  if (length > 60) {
+    return braces[0] +
+           (base === '' ? '' : base + '\n ') +
+           ' ' +
+           output.join(',\n  ') +
+           ' ' +
+           braces[1];
+  }
+
+  return braces[0] + base + ' ' + output.join(', ') + ' ' + braces[1];
+}
+
+
+// NOTE: These type checking functions intentionally don't use `instanceof`
+// because it is fragile and can be easily faked with `Object.create()`.
+function isArray(ar) {
+  return Array.isArray(ar);
+}
+exports.isArray = isArray;
+
+function isBoolean(arg) {
+  return typeof arg === 'boolean';
+}
+exports.isBoolean = isBoolean;
+
+function isNull(arg) {
+  return arg === null;
+}
+exports.isNull = isNull;
+
+function isNullOrUndefined(arg) {
+  return arg == null;
+}
+exports.isNullOrUndefined = isNullOrUndefined;
+
+function isNumber(arg) {
+  return typeof arg === 'number';
+}
+exports.isNumber = isNumber;
+
+function isString(arg) {
+  return typeof arg === 'string';
+}
+exports.isString = isString;
+
+function isSymbol(arg) {
+  return typeof arg === 'symbol';
+}
+exports.isSymbol = isSymbol;
+
+function isUndefined(arg) {
+  return arg === void 0;
+}
+exports.isUndefined = isUndefined;
+
+function isRegExp(re) {
+  return isObject(re) && objectToString(re) === '[object RegExp]';
+}
+exports.isRegExp = isRegExp;
+
+function isObject(arg) {
+  return typeof arg === 'object' && arg !== null;
+}
+exports.isObject = isObject;
+
+function isDate(d) {
+  return isObject(d) && objectToString(d) === '[object Date]';
+}
+exports.isDate = isDate;
+
+function isError(e) {
+  return isObject(e) &&
+      (objectToString(e) === '[object Error]' || e instanceof Error);
+}
+exports.isError = isError;
+
+function isFunction(arg) {
+  return typeof arg === 'function';
+}
+exports.isFunction = isFunction;
+
+function isPrimitive(arg) {
+  return arg === null ||
+         typeof arg === 'boolean' ||
+         typeof arg === 'number' ||
+         typeof arg === 'string' ||
+         typeof arg === 'symbol' ||  // ES6 symbol
+         typeof arg === 'undefined';
+}
+exports.isPrimitive = isPrimitive;
+
+exports.isBuffer = require('./support/isBuffer');
+
+function objectToString(o) {
+  return Object.prototype.toString.call(o);
+}
+
+
+function pad(n) {
+  return n < 10 ? '0' + n.toString(10) : n.toString(10);
+}
+
+
+var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep',
+              'Oct', 'Nov', 'Dec'];
+
+// 26 Feb 16:19:34
+function timestamp() {
+  var d = new Date();
+  var time = [pad(d.getHours()),
+              pad(d.getMinutes()),
+              pad(d.getSeconds())].join(':');
+  return [d.getDate(), months[d.getMonth()], time].join(' ');
+}
+
+
+// log is just a thin wrapper to console.log that prepends a timestamp
+exports.log = function() {
+  console.log('%s - %s', timestamp(), exports.format.apply(exports, arguments));
+};
+
+
+exports.inherits = require('inherits');
+
+exports._extend = function(origin, add) {
+  // Don't do anything if add isn't an object
+  if (!add || !isObject(add)) return origin;
+
+  var keys = Object.keys(add);
+  var i = keys.length;
+  while (i--) {
+    origin[keys[i]] = add[keys[i]];
+  }
+  return origin;
+};
+
+function hasOwnProperty(obj, prop) {
+  return Object.prototype.hasOwnProperty.call(obj, prop);
+}
+
+}).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"./support/isBuffer":50,"_process":49,"inherits":48}],52:[function(require,module,exports){
+var hasOwn = Object.prototype.hasOwnProperty;
+var toString = Object.prototype.toString;
+var undefined;
+
+var isPlainObject = function isPlainObject(obj) {
+	'use strict';
+	if (!obj || toString.call(obj) !== '[object Object]') {
+		return false;
+	}
+
+	var has_own_constructor = hasOwn.call(obj, 'constructor');
+	var has_is_property_of_method = obj.constructor && obj.constructor.prototype && hasOwn.call(obj.constructor.prototype, 'isPrototypeOf');
+	// Not own constructor property must be Object
+	if (obj.constructor && !has_own_constructor && !has_is_property_of_method) {
+		return false;
+	}
+
+	// Own properties are enumerated firstly, so to speed up,
+	// if last one is own, then all properties are own.
+	var key;
+	for (key in obj) {}
+
+	return key === undefined || hasOwn.call(obj, key);
+};
+
+module.exports = function extend() {
+	'use strict';
+	var options, name, src, copy, copyIsArray, clone,
+		target = arguments[0],
+		i = 1,
+		length = arguments.length,
+		deep = false;
+
+	// Handle a deep copy situation
+	if (typeof target === 'boolean') {
+		deep = target;
+		target = arguments[1] || {};
+		// skip the boolean and the target
+		i = 2;
+	} else if ((typeof target !== 'object' && typeof target !== 'function') || target == null) {
+		target = {};
+	}
+
+	for (; i < length; ++i) {
+		options = arguments[i];
+		// Only deal with non-null/undefined values
+		if (options != null) {
+			// Extend the base object
+			for (name in options) {
+				src = target[name];
+				copy = options[name];
+
+				// Prevent never-ending loop
+				if (target === copy) {
+					continue;
+				}
+
+				// Recurse if we're merging plain objects or arrays
+				if (deep && copy && (isPlainObject(copy) || (copyIsArray = Array.isArray(copy)))) {
+					if (copyIsArray) {
+						copyIsArray = false;
+						clone = src && Array.isArray(src) ? src : [];
+					} else {
+						clone = src && isPlainObject(src) ? src : {};
+					}
+
+					// Never move original objects, clone them
+					target[name] = extend(deep, clone, copy);
+
+				// Don't bring in undefined values
+				} else if (copy !== undefined) {
+					target[name] = copy;
+				}
+			}
+		}
+	}
+
+	// Return the modified object
+	return target;
+};
+
+
+},{}],53:[function(require,module,exports){
+/* Web Font Loader v1.6.10 - (c) Adobe Systems, Google. License: Apache 2.0 */
+(function(){function aa(a,b,c){return a.call.apply(a.bind,arguments)}function ba(a,b,c){if(!a)throw Error();if(2<arguments.length){var d=Array.prototype.slice.call(arguments,2);return function(){var c=Array.prototype.slice.call(arguments);Array.prototype.unshift.apply(c,d);return a.apply(b,c)}}return function(){return a.apply(b,arguments)}}function n(a,b,c){n=Function.prototype.bind&&-1!=Function.prototype.bind.toString().indexOf("native code")?aa:ba;return n.apply(null,arguments)}var p=Date.now||function(){return+new Date};function q(a,b){this.F=a;this.k=b||a;this.H=this.k.document}var ca=!!window.FontFace;q.prototype.createElement=function(a,b,c){a=this.H.createElement(a);if(b)for(var d in b)b.hasOwnProperty(d)&&("style"==d?a.style.cssText=b[d]:a.setAttribute(d,b[d]));c&&a.appendChild(this.H.createTextNode(c));return a};function s(a,b,c){a=a.H.getElementsByTagName(b)[0];a||(a=document.documentElement);a.insertBefore(c,a.lastChild)}
+function t(a,b,c){b=b||[];c=c||[];for(var d=a.className.split(/\s+/),e=0;e<b.length;e+=1){for(var f=!1,g=0;g<d.length;g+=1)if(b[e]===d[g]){f=!0;break}f||d.push(b[e])}b=[];for(e=0;e<d.length;e+=1){f=!1;for(g=0;g<c.length;g+=1)if(d[e]===c[g]){f=!0;break}f||b.push(d[e])}a.className=b.join(" ").replace(/\s+/g," ").replace(/^\s+|\s+$/,"")}function u(a,b){for(var c=a.className.split(/\s+/),d=0,e=c.length;d<e;d++)if(c[d]==b)return!0;return!1}
+function v(a){if("string"===typeof a.fa)return a.fa;var b=a.k.location.protocol;"about:"==b&&(b=a.F.location.protocol);return"https:"==b?"https:":"http:"}function x(a,b,c){function d(){l&&e&&f&&(l(g),l=null)}b=a.createElement("link",{rel:"stylesheet",href:b,media:"all"});var e=!1,f=!0,g=null,l=c||null;ca?(b.onload=function(){e=!0;d()},b.onerror=function(){e=!0;g=Error("Stylesheet failed to load");d()}):setTimeout(function(){e=!0;d()},0);s(a,"head",b)}
+function y(a,b,c,d){var e=a.H.getElementsByTagName("head")[0];if(e){var f=a.createElement("script",{src:b}),g=!1;f.onload=f.onreadystatechange=function(){g||this.readyState&&"loaded"!=this.readyState&&"complete"!=this.readyState||(g=!0,c&&c(null),f.onload=f.onreadystatechange=null,"HEAD"==f.parentNode.tagName&&e.removeChild(f))};e.appendChild(f);setTimeout(function(){g||(g=!0,c&&c(Error("Script load timeout")))},d||5E3);return f}return null};function z(){this.S=0;this.K=null}function A(a){a.S++;return function(){a.S--;B(a)}}function C(a,b){a.K=b;B(a)}function B(a){0==a.S&&a.K&&(a.K(),a.K=null)};function D(a){this.ea=a||"-"}D.prototype.d=function(a){for(var b=[],c=0;c<arguments.length;c++)b.push(arguments[c].replace(/[\W_]+/g,"").toLowerCase());return b.join(this.ea)};function E(a,b){this.Q=a;this.M=4;this.L="n";var c=(b||"n4").match(/^([nio])([1-9])$/i);c&&(this.L=c[1],this.M=parseInt(c[2],10))}E.prototype.getName=function(){return this.Q};function da(a){return G(a)+" "+(a.M+"00")+" 300px "+H(a.Q)}function H(a){var b=[];a=a.split(/,\s*/);for(var c=0;c<a.length;c++){var d=a[c].replace(/['"]/g,"");-1!=d.indexOf(" ")||/^\d/.test(d)?b.push("'"+d+"'"):b.push(d)}return b.join(",")}function I(a){return a.L+a.M}
+function G(a){var b="normal";"o"===a.L?b="oblique":"i"===a.L&&(b="italic");return b}function ea(a){var b=4,c="n",d=null;a&&((d=a.match(/(normal|oblique|italic)/i))&&d[1]&&(c=d[1].substr(0,1).toLowerCase()),(d=a.match(/([1-9]00|normal|bold)/i))&&d[1]&&(/bold/i.test(d[1])?b=7:/[1-9]00/.test(d[1])&&(b=parseInt(d[1].substr(0,1),10))));return c+b};function fa(a,b){this.a=a;this.j=a.k.document.documentElement;this.O=b;this.g="wf";this.e=new D("-");this.da=!1!==b.events;this.u=!1!==b.classes}function ga(a){a.u&&t(a.j,[a.e.d(a.g,"loading")]);J(a,"loading")}function K(a){if(a.u){var b=u(a.j,a.e.d(a.g,"active")),c=[],d=[a.e.d(a.g,"loading")];b||c.push(a.e.d(a.g,"inactive"));t(a.j,c,d)}J(a,"inactive")}function J(a,b,c){if(a.da&&a.O[b])if(c)a.O[b](c.getName(),I(c));else a.O[b]()};function ha(){this.t={}}function ia(a,b,c){var d=[],e;for(e in b)if(b.hasOwnProperty(e)){var f=a.t[e];f&&d.push(f(b[e],c))}return d};function L(a,b){this.a=a;this.h=b;this.m=this.a.createElement("span",{"aria-hidden":"true"},this.h)}function M(a,b){var c=a.m,d;d="display:block;position:absolute;top:-9999px;left:-9999px;font-size:300px;width:auto;height:auto;line-height:normal;margin:0;padding:0;font-variant:normal;white-space:nowrap;font-family:"+H(b.Q)+";"+("font-style:"+G(b)+";font-weight:"+(b.M+"00")+";");c.style.cssText=d}function N(a){s(a.a,"body",a.m)}L.prototype.remove=function(){var a=this.m;a.parentNode&&a.parentNode.removeChild(a)};function O(a,b,c,d,e,f){this.G=a;this.J=b;this.f=d;this.a=c;this.v=e||3E3;this.h=f||void 0}O.prototype.start=function(){var a=this.a.k.document,b=this;Promise.race([new Promise(function(a,d){setTimeout(function(){d(b.f)},b.v)}),a.fonts.load(da(this.f),this.h)]).then(function(a){1===a.length?b.G(b.f):b.J(b.f)},function(){b.J(b.f)})};function P(a,b,c,d,e,f,g){this.G=a;this.J=b;this.a=c;this.f=d;this.h=g||"BESbswy";this.s={};this.v=e||3E3;this.Z=f||null;this.D=this.C=this.A=this.w=null;this.w=new L(this.a,this.h);this.A=new L(this.a,this.h);this.C=new L(this.a,this.h);this.D=new L(this.a,this.h);M(this.w,new E(this.f.getName()+",serif",I(this.f)));M(this.A,new E(this.f.getName()+",sans-serif",I(this.f)));M(this.C,new E("serif",I(this.f)));M(this.D,new E("sans-serif",I(this.f)));N(this.w);N(this.A);N(this.C);N(this.D)}
+var Q={ia:"serif",ha:"sans-serif"},R=null;function S(){if(null===R){var a=/AppleWebKit\/([0-9]+)(?:\.([0-9]+))/.exec(window.navigator.userAgent);R=!!a&&(536>parseInt(a[1],10)||536===parseInt(a[1],10)&&11>=parseInt(a[2],10))}return R}P.prototype.start=function(){this.s.serif=this.C.m.offsetWidth;this.s["sans-serif"]=this.D.m.offsetWidth;this.ga=p();T(this)};function ja(a,b,c){for(var d in Q)if(Q.hasOwnProperty(d)&&b===a.s[Q[d]]&&c===a.s[Q[d]])return!0;return!1}
+function T(a){var b=a.w.m.offsetWidth,c=a.A.m.offsetWidth,d;(d=b===a.s.serif&&c===a.s["sans-serif"])||(d=S()&&ja(a,b,c));d?p()-a.ga>=a.v?S()&&ja(a,b,c)&&(null===a.Z||a.Z.hasOwnProperty(a.f.getName()))?U(a,a.G):U(a,a.J):ka(a):U(a,a.G)}function ka(a){setTimeout(n(function(){T(this)},a),50)}function U(a,b){setTimeout(n(function(){this.w.remove();this.A.remove();this.C.remove();this.D.remove();b(this.f)},a),0)};function V(a,b,c){this.a=a;this.p=b;this.P=0;this.ba=this.Y=!1;this.v=c}var la=!!window.FontFace;V.prototype.V=function(a){var b=this.p;b.u&&t(b.j,[b.e.d(b.g,a.getName(),I(a).toString(),"active")],[b.e.d(b.g,a.getName(),I(a).toString(),"loading"),b.e.d(b.g,a.getName(),I(a).toString(),"inactive")]);J(b,"fontactive",a);this.ba=!0;ma(this)};
+V.prototype.W=function(a){var b=this.p;if(b.u){var c=u(b.j,b.e.d(b.g,a.getName(),I(a).toString(),"active")),d=[],e=[b.e.d(b.g,a.getName(),I(a).toString(),"loading")];c||d.push(b.e.d(b.g,a.getName(),I(a).toString(),"inactive"));t(b.j,d,e)}J(b,"fontinactive",a);ma(this)};function ma(a){0==--a.P&&a.Y&&(a.ba?(a=a.p,a.u&&t(a.j,[a.e.d(a.g,"active")],[a.e.d(a.g,"loading"),a.e.d(a.g,"inactive")]),J(a,"active")):K(a.p))};function na(a){this.F=a;this.q=new ha;this.$=0;this.T=this.U=!0}na.prototype.load=function(a){this.a=new q(this.F,a.context||this.F);this.U=!1!==a.events;this.T=!1!==a.classes;oa(this,new fa(this.a,a),a)};
+function pa(a,b,c,d,e){var f=0==--a.$;(a.T||a.U)&&setTimeout(function(){var a=e||null,l=d||null||{};if(0===c.length&&f)K(b.p);else{b.P+=c.length;f&&(b.Y=f);var h,k=[];for(h=0;h<c.length;h++){var m=c[h],w=l[m.getName()],r=b.p,F=m;r.u&&t(r.j,[r.e.d(r.g,F.getName(),I(F).toString(),"loading")]);J(r,"fontloading",F);r=null;r=la?new O(n(b.V,b),n(b.W,b),b.a,m,b.v,w):new P(n(b.V,b),n(b.W,b),b.a,m,b.v,a,w);k.push(r)}for(h=0;h<k.length;h++)k[h].start()}},0)}
+function oa(a,b,c){var d=[],e=c.timeout;ga(b);var d=ia(a.q,c,a.a),f=new V(a.a,b,e);a.$=d.length;b=0;for(c=d.length;b<c;b++)d[b].load(function(b,c,d){pa(a,f,b,c,d)})};function qa(a,b,c){this.N=a?a:b+ra;this.o=[];this.R=[];this.ca=c||""}var ra="//fonts.googleapis.com/css";function sa(a,b){for(var c=b.length,d=0;d<c;d++){var e=b[d].split(":");3==e.length&&a.R.push(e.pop());var f="";2==e.length&&""!=e[1]&&(f=":");a.o.push(e.join(f))}}
+qa.prototype.d=function(){if(0==this.o.length)throw Error("No fonts to load!");if(-1!=this.N.indexOf("kit="))return this.N;for(var a=this.o.length,b=[],c=0;c<a;c++)b.push(this.o[c].replace(/ /g,"+"));a=this.N+"?family="+b.join("%7C");0<this.R.length&&(a+="&subset="+this.R.join(","));0<this.ca.length&&(a+="&text="+encodeURIComponent(this.ca));return a};function ta(a){this.o=a;this.aa=[];this.I={}}
+var ua={latin:"BESbswy",cyrillic:"&#1081;&#1103;&#1046;",greek:"&#945;&#946;&#931;",khmer:"&#x1780;&#x1781;&#x1782;",Hanuman:"&#x1780;&#x1781;&#x1782;"},va={thin:"1",extralight:"2","extra-light":"2",ultralight:"2","ultra-light":"2",light:"3",regular:"4",book:"4",medium:"5","semi-bold":"6",semibold:"6","demi-bold":"6",demibold:"6",bold:"7","extra-bold":"8",extrabold:"8","ultra-bold":"8",ultrabold:"8",black:"9",heavy:"9",l:"3",r:"4",b:"7"},wa={i:"i",italic:"i",n:"n",normal:"n"},xa=/^(thin|(?:(?:extra|ultra)-?)?light|regular|book|medium|(?:(?:semi|demi|extra|ultra)-?)?bold|black|heavy|l|r|b|[1-9]00)?(n|i|normal|italic)?$/;
+ta.prototype.parse=function(){for(var a=this.o.length,b=0;b<a;b++){var c=this.o[b].split(":"),d=c[0].replace(/\+/g," "),e=["n4"];if(2<=c.length){var f;var g=c[1];f=[];if(g)for(var g=g.split(","),l=g.length,h=0;h<l;h++){var k;k=g[h];if(k.match(/^[\w-]+$/))if(k=xa.exec(k.toLowerCase()),null==k)k="";else{var m;m=k[1];if(null==m||""==m)m="4";else{var w=va[m];m=w?w:isNaN(m)?"4":m.substr(0,1)}k=k[2];k=[null==k||""==k?"n":wa[k],m].join("")}else k="";k&&f.push(k)}0<f.length&&(e=f);3==c.length&&(c=c[2],f=
+[],c=c?c.split(","):f,0<c.length&&(c=ua[c[0]])&&(this.I[d]=c))}this.I[d]||(c=ua[d])&&(this.I[d]=c);for(c=0;c<e.length;c+=1)this.aa.push(new E(d,e[c]))}};function ya(a,b){this.a=a;this.c=b}var za={Arimo:!0,Cousine:!0,Tinos:!0};ya.prototype.load=function(a){var b=new z,c=this.a,d=new qa(this.c.api,v(c),this.c.text),e=this.c.families;sa(d,e);var f=new ta(e);f.parse();x(c,d.d(),A(b));C(b,function(){a(f.aa,f.I,za)})};function W(a,b){this.a=a;this.c=b;this.X=[]}W.prototype.B=function(a){var b=this.a;return v(this.a)+(this.c.api||"//f.fontdeck.com/s/css/js/")+(b.k.location.hostname||b.F.location.hostname)+"/"+a+".js"};
+W.prototype.load=function(a){var b=this.c.id,c=this.a.k,d=this;b?(c.__webfontfontdeckmodule__||(c.__webfontfontdeckmodule__={}),c.__webfontfontdeckmodule__[b]=function(b,c){for(var g=0,l=c.fonts.length;g<l;++g){var h=c.fonts[g];d.X.push(new E(h.name,ea("font-weight:"+h.weight+";font-style:"+h.style)))}a(d.X)},y(this.a,this.B(b),function(b){b&&a([])})):a([])};function X(a,b){this.a=a;this.c=b}X.prototype.B=function(a){return(this.c.api||"https://use.typekit.net")+"/"+a+".js"};X.prototype.load=function(a){var b=this.c.id,c=this.a.k;b?y(this.a,this.B(b),function(b){if(b)a([]);else if(c.Typekit&&c.Typekit.config&&c.Typekit.config.fn){b=c.Typekit.config.fn;for(var e=[],f=0;f<b.length;f+=2)for(var g=b[f],l=b[f+1],h=0;h<l.length;h++)e.push(new E(g,l[h]));try{c.Typekit.load({events:!1,classes:!1,async:!0})}catch(k){}a(e)}},2E3):a([])};function Y(a,b){this.a=a;this.c=b}Y.prototype.B=function(a,b){var c=v(this.a),d=(this.c.api||"fast.fonts.net/jsapi").replace(/^.*http(s?):(\/\/)?/,"");return c+"//"+d+"/"+a+".js"+(b?"?v="+b:"")};
+Y.prototype.load=function(a){function b(){if(e["__mti_fntLst"+c]){var d=e["__mti_fntLst"+c](),g=[],l;if(d)for(var h=0;h<d.length;h++){var k=d[h].fontfamily;void 0!=d[h].fontStyle&&void 0!=d[h].fontWeight?(l=d[h].fontStyle+d[h].fontWeight,g.push(new E(k,l))):g.push(new E(k))}a(g)}else setTimeout(function(){b()},50)}var c=this.c.projectId,d=this.c.version;if(c){var e=this.a.k;y(this.a,this.B(c,d),function(c){c?a([]):b()}).id="__MonotypeAPIScript__"+c}else a([])};function Aa(a,b){this.a=a;this.c=b}Aa.prototype.load=function(a){var b,c,d=this.c.urls||[],e=this.c.families||[],f=this.c.testStrings||{},g=new z;b=0;for(c=d.length;b<c;b++)x(this.a,d[b],A(g));var l=[];b=0;for(c=e.length;b<c;b++)if(d=e[b].split(":"),d[1])for(var h=d[1].split(","),k=0;k<h.length;k+=1)l.push(new E(d[0],h[k]));else l.push(new E(d[0]));C(g,function(){a(l,f)})};var Z=new na(window);Z.q.t.custom=function(a,b){return new Aa(b,a)};Z.q.t.fontdeck=function(a,b){return new W(b,a)};Z.q.t.monotype=function(a,b){return new Y(b,a)};Z.q.t.typekit=function(a,b){return new X(b,a)};Z.q.t.google=function(a,b){return new ya(b,a)};var $={load:n(Z.load,Z)};"function"===typeof define&&define.amd?define(function(){return $}):"undefined"!==typeof module&&module.exports?module.exports=$:(window.WebFont=$,window.WebFontConfig&&Z.load(window.WebFontConfig));}());
+
+
+},{}]},{},[1]);

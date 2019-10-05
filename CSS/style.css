@@ -1,100 +1,144 @@
+* {
+    font-family: "Georgia";
+    color: #e33d48;
+}
+
 body {
-    background: linear-gradient(black, #0d0226) ;
-    font-family: "open sans";
+    background: linear-gradient(black, #0d0226);
 }
 
-.midi {
-    width: 4%;
+.left {
+    width: 70%;
     float: left;
-    padding-top: 213px;
+    border-right: white solid 2px;
+    padding-left: 5px;
 }
 
-.keyboard {
-    border-spacing: 1.5px;
+#heading {
+    text-align: center;
 }
 
-.keyboard tr td {
-    height: 18;
-    padding: 0px;
-    font-size: 10px;
+h1{
+    font-size: 30px;
+    padding: 10px;
+    margin-block-start: 0em;
+    margin-block-end: 0em;
+}
+
+.legend {
+    width: 6%;
+    float: left;
+}
+
+#instrument-block {
+    padding-top: 5px;
+    border-spacing: 3px;
+}
+
+#instrument-block tr td{
+    height: 53;
+    width: 50;
+    padding-top: 0px;
+    font-size: 15px;
     font-style: normal;
-    color: black;
-    border: black solid 0.4px;
+    background-color: black;
+    border: white solid 1px;
     border-top-right-radius: 4px;
     border-bottom-right-radius: 4px;
     text-align: center;
 }
 
+#key1 {
+    padding-top: 1px;
+    border-spacing: 4px;
+}
+
 #key2 {
-    padding-top: 12px;
+    border-spacing: 4px;
 }
 
-.norm {
-    background-color: #e33d48;
-}
-
-.flat {
-    background-color: rgb(145, 143, 143);
-}
-
-.grid {
-    width: 850px;
-    border-right: white solid 2px;
-    padding-left: 10px;
-    padding-right: 20px;
-    float: left;
-}
-
-.seq {
-    padding-bottom: 10px;
-}
-
-#tempo {
-    padding-top: 20px; 
-}
-
-aside {
-    float: left;
-    padding: 10px;
-    padding-left: 30px;
-}
-
-h2 {
+.keyboard tr td {
+    width: 50px;
+    padding-top: 0px;
+    font-size: 13px;
+    font-style: normal;
     color: #e33d48;
-    width: 250px;
-    margin-block-start: 0px;
-    margin-block-end: 0px;
-    padding-top: 20px;
-}
-
-h3 {
-    color: #e33d48;
+    background-color: black;
+    border: white solid 1px;
+    border-top-right-radius: 4px;
+    border-bottom-right-radius: 4px;
     text-align: center;
 }
 
-td {
-    color: #e33d48;
-    padding: 0px;
-    width: 51.125;
-    font-weight: bold;
-    font-size: 25px;
-    padding-top: 20px;
-}
-
-.row1 {
-    padding-top: 43px;
-}
-
-.row2 {
-    padding-top: 20px;
-}
-
-.row3 {
-    padding-top: 270px;
-}
-
-.col {
-    width: 20%;
+.grids {
+    width: 94%;
     float: left;
-    padding-right: 40px;
+    padding-bottom: 20px;
+}
+
+#drumMatrix {
+    padding-top: 5px;
+    height: 175px;
+    width: 850px;
+    float: left;
+}
+
+#synthMatrix {
+    padding-top: 5px;
+    height: 290px;
+    width: 850px;
+    float: left;
+}
+
+#bassMatrix {
+    padding-top: 5px;
+    height: 290px;
+    width: 850px;
+    float: left;
+}
+
+.right {
+    width: 29.5%;
+    float: left;
+}
+
+#drumVol {
+    height: 160px;
+    padding-left: 55px;
+    padding-top: 80px;
+}
+
+#keyVol {
+    padding-left: 60px;
+    padding-top: 90px;
+}
+
+#sVol {
+    width: 50%;
+    float: left;
+}
+
+#bVol {
+    width: 50%;
+    float: left;
+}
+
+#startBtn {
+    width: 25%;
+    float: left;
+}
+
+#stopBtn {
+    width: 25%;
+    float: left;
+}
+
+#tempoDial {
+    width: 45%;
+    float: left;
+}
+
+#trackControl {
+    padding-left: 60px;
+    padding-top: 150px;
 }
