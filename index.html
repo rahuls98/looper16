@@ -6,10 +6,13 @@
         <script type="text/javascript" src="scripts/Tone.js"></script>
         <script type="text/javascript" src="scripts/nexusUI.js"></script>
         <script type="text/javascript" src="scripts/interface.js"></script>
+        <script type="text/javascript" src="scripts/drums.js"></script>
         <script type="text/javascript" src="scripts/synth.js"></script>
+        <script type="text/javascript" src="scripts/bass.js"></script>
         <script type="text/javascript" src="scripts/loop.js"></script>
     </head>
     <body>
+        <!--SECTION HEADINGS-->
         <section id="heading">
             <div class="left" id="seqHead">
                 <h1>SEQUENCERS</h1>
@@ -19,7 +22,9 @@
             </div>
         </section>
 
+        <!--LEGENDS AND GRIDS-->
         <div class="left">
+            <!--DRUM AND KEYS LEGENDS-->
             <div class="legend">
                 <table id="instrument-block">
                     <tr><td>HiHat</td></tr>
@@ -57,6 +62,7 @@
                     <tr><td class="norm">C</td></tr>
                 </table>
             </div>
+            <!--SEQUENCER GRIDS-->
             <div class="grids">
                 <div><canvas nx="matrix" id="drumMatrix"></canvas></div>
                 <div><canvas nx="matrix" id="synthMatrix"></canvas></div>
@@ -64,16 +70,21 @@
             </div>
         </div>
 
+        <!--CONTROLLERS-->
         <div class="right">
+            <!--DRUM VOLUME CONTROL MULTISLIDER-->
             <div id="drumVol">
                 <canvas nx="multislider" id="drumVolume" width="300" height="180"></canvas>
                 <h3>Drum Volume</h3>
             </div>
+            <!--SYNTH AND BASS VOLUMES-->
             <div id="keyVol">
+                <!--SYNTH VOLUME CONTROL DIAL-->
                 <div id="sVol">
                     <canvas nx="dial" id="synthVol" min="0" max="100"></canvas>
                     <h3>Synth Volume</h3>
                 </div>
+                <!--BASS VOLUME CONTROL DIAL-->
                 <div id="bVol">
                     <canvas nx="dial" id="bassVol" min="0" max="100"></canvas>
                     <h3>Bass Volume</h3>
@@ -81,20 +92,23 @@
             </div>
             <br>
             <br>
+            <!--START, STOP AND TEMPO-->
             <div id="trackControl">
+                <!--START BUTTON-->
                 <div id="startBtn">
                     <canvas nx="button" id="start"></canvas>
                     <h3>Start</h3>
                 </div>
+                <!--STOP BUTTON-->
                 <div id="stopBtn">
                     <canvas nx="button" id="stop"></canvas>
                     <h3>Stop</h3>
                 </div>
+                <!--TEMPO CONTROL DIAL-->
                 <div id="tempoDial">
                     <canvas nx="dial" id="tempo" min="80" max="120"></canvas>
                     <h3>Track Tempo</h3>
                 </div>
-                
             </div>
         </div>
 

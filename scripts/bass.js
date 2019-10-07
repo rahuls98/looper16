@@ -1,37 +1,22 @@
 // mess with this! don't use the same one
-var bassSynth = new Tone.MonoSynth({
-    "volume": 7,
-    filter:{
-        Q: 2,
-        type:"lowshelf",
-        frequency:200,
-        gain: -24,
-    },
-    filter:{
-        type:"lowpass",
-        Q: 0.5,
-        frequency:10000,
-        gain: -24,
-    },
-    "envelope": {
-        "attack": 0.001,
-        "decay": 1,
-        "sustain": 0.4,
-        "release": 0.1,
-    },
-    "filterEnvelope": {
-        "attack": 0.001,
-        "decay": 0.31,
-        "sustain": 1,
-        "baseFrequency": 150,
-        "octaves": 2.6
+var bassSynth = new Tone.Synth({
+    "volume": 2,
+    oscillator : {
+        type : "square"
+    } ,
+    envelope : {
+        attack : 0.46,
+        decay : 1.17,
+        sustain : 0.15,
+        release : 2.84
     }
-})
+}).toMaster();
 
 var bassGain = new Tone.Volume(1);
 bassSynth.chain(bassGain, Tone.Master);
 
-var bassNotes = modeFunctions.major(55.0, bassNotes);
+//C3 -> C4
+var bassNotes = [261.6256,246.9417,233.0819,220.0000,207.6523,195.9977,184.9972,174.6141,164.8138,155.5635,146.8324,,138.5913,130.8128]
 
 function triggerBass(bassMatrix, time, col) {
     var column = bassMatrix.matrix[col];
