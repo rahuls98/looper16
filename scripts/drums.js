@@ -1,24 +1,24 @@
-Tone.Transport.bpm.value = 80;
+//Create individual players
+var hihat = new Tone.Player("../samples/hihat.wav").toMaster();
+var snare = new Tone.Player("../samples/snare.wav").toMaster();
+var kick = new Tone.Player("../samples/kick.wav").toMaster();
 
-var drums = new Tone.Players({
-    hihat : "hihat.wav",
-    kick : "../samples/kick.wav",
-    snare : "../samples/snare.wav",
-    volume : 2,
-    fadeOut : 0.1
-}).toMaster();
+hihat.volume.value = 5;
+snare.volume.value = 5;
+kick.volume.value = 5;
 
+//Called by loop.js
 function triggerDrums(drumMatrix, time, col) {
     var column = drumMatrix.matrix[col];
     for (var i = 0; i < column.length; i++) {
       if (column[0] === 1) {
-        drums.get('hihat').start('now', 0, time);
+        hihat.start();
       }
       if (column[1] === 1) {
-        drums.get('kick').start('now', 0, time);
+        snare.start();
       }
       if (column[2] === 1) {
-        drums.get('snare').start('now', 0, time);
+        kick.start();
       }
     }
     drumMatrix.place = col;

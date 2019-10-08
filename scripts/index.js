@@ -1,14 +1,16 @@
 var AudioContext = window.AudioContext || window.webkitAudioContext;
 
+//Global tempo
 Tone.Transport.bpm.value = 100;
 
+//Load Nexus UI elements
 nx.onload = function() {
+    //Set accent and fill colors
     [drumMatrix, drumVolume, synthMatrix, synthVol, 
         bassMatrix, bassVol, start, stop, tempo].forEach(element => { 
         element.colors.accent = "#e33d48",
         element.colors.fill = "#333"
     });
-
 
     drumMatrix.col = 16;
     drumMatrix.row = 3;
@@ -32,6 +34,7 @@ nx.onload = function() {
     tempo.init();
 }
 
+//Start button event listener
 document.getElementById('start').addEventListener('click', function() {
     var context = new AudioContext();
     Tone.context.resume();
@@ -39,6 +42,7 @@ document.getElementById('start').addEventListener('click', function() {
     loop.start();
 });
 
+//Stop button event listener
 document.getElementById('stop').addEventListener('click', function() {
     Tone.Transport.stop();
     [synthMatrix, bassMatrix].forEach(matrix => matrix.stop())
