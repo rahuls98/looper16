@@ -1,3 +1,4 @@
+/*BODY STYLING*/
 * {
     font-family: "Georgia";
     color: #e33d48;
@@ -7,6 +8,7 @@ body {
     background: linear-gradient(black, #0d0226);
 }
 
+/*LEGENDS AND GRIDS*/
 .left {
     width: 69%;
     float: left;
@@ -14,6 +16,7 @@ body {
     padding-left: 5px;
 }
 
+/*SECTION HEADINGS*/
 #heading {
     text-align: center;
 }
@@ -25,16 +28,19 @@ h1{
     margin-block-end: 0em;
 }
 
+/*DRUMS AND KEYS LEGENDS*/
 .legend {
     width: 6%;
     float: left;
 }
 
+/*DRUM LEGEND*/
 #instrument-block {
     padding-top: 5px;
     border-spacing: 3px;
 }
 
+/*DRUM LEGEND CELLS*/
 #instrument-block tr td{
     height: 53;
     width: 50;
@@ -48,15 +54,18 @@ h1{
     text-align: center;
 }
 
+/*SYNTH LEGEND*/
 #key1 {
     padding-top: 1px;
     border-spacing: 4px;
 }
 
+/*BASS LEGEND*/
 #key2 {
     border-spacing: 4px;
 }
 
+/*KEYS LEGEND CELLS*/
 .keyboard tr td {
     width: 50px;
     padding-top: 0px;
@@ -70,6 +79,7 @@ h1{
     text-align: center;
 }
 
+/*GRIDS*/
 .grids {
     width: 94%;
     float: left;
@@ -97,47 +107,56 @@ h1{
     float: left;
 }
 
+/*CONTROLLERS*/
 .right {
     width: 29%;
     float: left;
 }
 
+/*DRUM VOLUME CONTROL MULTISLIDERS*/
 #drumVol {
     height: 160px;
     padding-left: 55px;
     padding-top: 80px;
 }
 
+/*SYNTH AND BASS VOLUMES*/
 #keyVol {
     padding-left: 60px;
     padding-top: 90px;
 }
 
+/*SYNTH VOLUME CONTROL DIAL*/
 #sVol {
     width: 50%;
     float: left;
 }
 
+/*BASS VOLUME CONTROL DIAL*/
 #bVol {
     width: 50%;
     float: left;
 }
 
+/*START BUTTON*/
 #startBtn {
     width: 25%;
     float: left;
 }
 
+/*STOP BUTTON*/
 #stopBtn {
     width: 25%;
     float: left;
 }
 
+/*TEMPO CONTROL DIAL*/
 #tempoDial {
     width: 45%;
     float: left;
 }
 
+/*START, STOP AND TEMPO*/
 #trackControl {
     padding-left: 60px;
     padding-top: 150px;
