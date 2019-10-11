@@ -47,3 +47,22 @@ document.getElementById('stop').addEventListener('click', function() {
     Tone.Transport.stop();
     [synthMatrix, bassMatrix].forEach(matrix => matrix.stop())
 });
+
+//Save button event listener
+document.getElementById('save').addEventListener('click', function() {
+    const save = {
+        drumMatrix: drumMatrix.matrix,
+        synthMatrix: synthMatrix.matrix,
+        bassMatrix: bassMatrix.matrix
+    }
+    window.localStorage['savefile'] = JSON.stringify(save);
+});
+
+//Load button event listener
+document.getElementById('load').addEventListener('click', function() {
+    const save = JSON.parse(window.localStorage['savefile']);
+    drumMatrix.matrix = save.drumMatrix;
+    bassMatrix.matrix = save.bassMatrix;
+    synthMatrix.matrix = save.synthMatrix;
+    [drumMatrix, synthMatrix, bassMatrix].forEach(matrix => matrix.init())
+});

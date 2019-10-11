@@ -117,7 +117,7 @@ h1{
 #drumVol {
     height: 160px;
     padding-left: 55px;
-    padding-top: 80px;
+    padding-top: 10px;
 }
 
 /*SYNTH AND BASS VOLUMES*/
@@ -160,4 +160,21 @@ h1{
 #trackControl {
     padding-left: 60px;
     padding-top: 150px;
+}
+
+/*SAVE BUTTON*/
+#saveBtn {
+    width: 25%;
+    float: left;
+}
+
+/*LOAD BUTTON*/
+#loadBtn {
+    width: 25%;
+    float: left;
+}
+
+/*STATE SAVE AND LOAD*/
+#presets {
+    padding-left: 40px;
 }
