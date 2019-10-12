@@ -66,3 +66,17 @@ document.getElementById('load').addEventListener('click', function() {
     synthMatrix.matrix = save.synthMatrix;
     [drumMatrix, synthMatrix, bassMatrix].forEach(matrix => matrix.init())
 });
+
+//Clear button event listener to clear grid pattern
+document.getElementById('clear').addEventListener('click', function() {
+    delete localStorage['pattern'];
+});
+
+//Reset button event listener to reset local storage memory
+document.getElementById('reset').addEventListener('click', function() {
+    const grid_reset = emptyMatrix;
+    drumMatrix.matrix = grid_reset.drumMatrix;
+    bassMatrix.matrix = grid_reset.bassMatrix;
+    synthMatrix.matrix = grid_reset.synthMatrix;
+    [drumMatrix, synthMatrix, bassMatrix].forEach(matrix => matrix.init())
+});
