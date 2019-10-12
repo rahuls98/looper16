@@ -55,12 +55,12 @@ document.getElementById('save').addEventListener('click', function() {
         synthMatrix: synthMatrix.matrix,
         bassMatrix: bassMatrix.matrix
     }
-    window.localStorage['savefile'] = JSON.stringify(save);
+    window.localStorage['pattern'] = JSON.stringify(save);
 });
 
 //Load button event listener
 document.getElementById('load').addEventListener('click', function() {
-    const save = JSON.parse(window.localStorage['savefile']);
+    const save = JSON.parse(window.localStorage['pattern']);
     drumMatrix.matrix = save.drumMatrix;
     bassMatrix.matrix = save.bassMatrix;
     synthMatrix.matrix = save.synthMatrix;
@@ -68,12 +68,12 @@ document.getElementById('load').addEventListener('click', function() {
 });
 
 //Clear button event listener to clear grid pattern
-document.getElementById('clear').addEventListener('click', function() {
+document.getElementById('reset').addEventListener('click', function() {
     delete localStorage['pattern'];
 });
 
 //Reset button event listener to reset local storage memory
-document.getElementById('reset').addEventListener('click', function() {
+document.getElementById('clear').addEventListener('click', function() {
     const grid_reset = emptyMatrix;
     drumMatrix.matrix = grid_reset.drumMatrix;
     bassMatrix.matrix = grid_reset.bassMatrix;
