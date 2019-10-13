@@ -1,12 +1,12 @@
 var AudioContext = window.AudioContext || window.webkitAudioContext;
 
 //Global tempo
-Tone.Transport.bpm.value = 100;
+Tone.Transport.bpm.value = 80;
 
 //Load Nexus UI elements
 nx.onload = function() {
     //Set accent and fill colors
-    [drumMatrix, drumVolume, synthMatrix, synthVol, 
+    [drumMatrix, drumVol, synthMatrix, synthVol, 
         bassMatrix, bassVol, start, stop, tempo].forEach(element => { 
         element.colors.accent = "#e33d48",
         element.colors.fill = "#333"
@@ -24,11 +24,11 @@ nx.onload = function() {
     synthMatrix.init();
     bassMatrix.init();
 
-    drumVolume.setNumberOfSliders(3);
-    drumVolume.init();
-    drumVolume.setSliderValue(0,0.5);
-    drumVolume.setSliderValue(1,0.5);
-    drumVolume.setSliderValue(2,0.5);
+    drumVol.setNumberOfSliders(3);
+    drumVol.init();
+    drumVol.setSliderValue(0,0.5);
+    drumVol.setSliderValue(1,0.5);
+    drumVol.setSliderValue(2,0.5);
 
     synthVol.val.value = -10;
     synthVol.init();
@@ -93,18 +93,30 @@ document.getElementById('reset').addEventListener('click', function() {
     delete localStorage['pattern'];
 });
 
+//Tempo dial event listener
 document.getElementById('tempo').addEventListener('mousedown',function(){
     tempo.on('*',function(){
         Tone.Transport.bpm.value = tempo.val.value;
     })
 });
 
+//Drum volume multislider event listener
+document.getElementById('drumVol').addEventListener('mousedown',function(){
+    drumVol.on('*',function(){
+        hihat.volume.value = (40*drumVol.val[0])-20;
+        snare.volume.value = (40*drumVol.val[1])-20;
+        kick.volume.value = (40*drumVol.val[2])-20;
+    })
+});
+
+//Synth volume dial event listener
 document.getElementById('synthVol').addEventListener('mousedown',function(){
     synthVol.on('*',function(){
         synth.volume.value = synthVol.val.value;
     })
 });
 
+//Bass volume dial event listener
 document.getElementById('bassVol').addEventListener('mousedown',function(){
     bassVol.on('*',function(){
         bassSynth.volume.value = bassVol.val.value;
