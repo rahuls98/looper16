@@ -1,3 +1,4 @@
-- Add functionality for volume dials.
-- Adjust CSS to adapt to different screen sizez, window resize, etc.
-  
+- Add functionality for drum volume multisliders.
+- Use better sounding synths and drum samples.
+- Adjust CSS to adapt to different screen sizes, window resize, etc.
+- Shift state saving option from browser local storage to better backend option.
