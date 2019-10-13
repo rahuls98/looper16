@@ -1,6 +1,6 @@
 //Create synth instrument
 var synth = new Tone.Synth({
-  "volume": 2,
+    volume: -10,
     oscillator : {
         type : "square",
         spread : 40

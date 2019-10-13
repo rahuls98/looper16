@@ -26,12 +26,23 @@ nx.onload = function() {
 
     drumVolume.setNumberOfSliders(3);
     drumVolume.init();
+    drumVolume.setSliderValue(0,0.5);
+    drumVolume.setSliderValue(1,0.5);
+    drumVolume.setSliderValue(2,0.5);
+
+    synthVol.val.value = -10;
     synthVol.init();
+    bassVol.val.value = -10;
     bassVol.init();
 
     start.init();
     stop.init();
+    tempo.val.value = 80;
     tempo.init();
+    save.init();
+    load.init();
+    reset.init();
+    clear.init();
 }
 
 //Start button event listener
@@ -68,15 +79,34 @@ document.getElementById('load').addEventListener('click', function() {
 });
 
 //Clear button event listener to clear grid pattern
-document.getElementById('reset').addEventListener('click', function() {
-    delete localStorage['pattern'];
-});
-
-//Reset button event listener to reset local storage memory
 document.getElementById('clear').addEventListener('click', function() {
     const grid_reset = emptyMatrix;
     drumMatrix.matrix = grid_reset.drumMatrix;
     bassMatrix.matrix = grid_reset.bassMatrix;
     synthMatrix.matrix = grid_reset.synthMatrix;
     [drumMatrix, synthMatrix, bassMatrix].forEach(matrix => matrix.init())
+});
+
+
+//Reset button event listener to reset local storage memory
+document.getElementById('reset').addEventListener('click', function() {
+    delete localStorage['pattern'];
+});
+
+document.getElementById('tempo').addEventListener('mousedown',function(){
+    tempo.on('*',function(){
+        Tone.Transport.bpm.value = tempo.val.value;
+    })
+});
+
+document.getElementById('synthVol').addEventListener('mousedown',function(){
+    synthVol.on('*',function(){
+        synth.volume.value = synthVol.val.value;
+    })
+});
+
+document.getElementById('bassVol').addEventListener('mousedown',function(){
+    bassVol.on('*',function(){
+        bassSynth.volume.value = bassVol.val.value;
+    })
 });
