@@ -1,15 +1,15 @@
 //Create synth instrument
 var synth = new Tone.Synth({
-    volume: -10,
-    oscillator : {
-        type : "square",
-        spread : 40
-    } ,
-    envelope : {
-        attack : 0.01,
-        decay : 1.60,
-        sustain : 1.5,
-        release : 1.60
+    "volume": -10,
+    "portamento":0,
+    "oscillator":{
+      "type":"triangle"
+    },
+    "envelope":{
+      "attack":0.001,
+      "decay":0.1,
+      "sustain":0.1,
+      "release":1.2
     }
 }).toMaster();
 
