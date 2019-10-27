@@ -7,7 +7,7 @@ Tone.Transport.bpm.value = 80;
 nx.onload = function() {
     //Set accent and fill colors
     [drumMatrix, drumVol, synthMatrix, synthVol, 
-        bassMatrix, bassVol, start, stop, tempo].forEach(element => { 
+        bassMatrix, bassVol, start, stop, tempo, save, load, reset, clear].forEach(element => { 
         element.colors.accent = "#e33d48",
         element.colors.fill = "#333"
     });
