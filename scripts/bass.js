@@ -1,15 +1,15 @@
 //Create the synth
 var bassSynth = new Tone.Synth({
-    volume: -10,
-    oscillator : {
-        type : "square"
-    } ,
-    envelope : {
-        attack : 0.46,
-        decay : 1.17,
-        sustain : 0.15,
-        release : 2.84
-    }
+  "portamento":0,
+  "oscillator":{
+      "type":"triangle"
+  },
+  "envelope":{
+      "attack":0.64,
+      "decay":1,
+      "sustain":0.2,
+      "release":2
+  }
 }).toMaster();
 
 //C3 -> C4

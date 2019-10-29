@@ -1,6 +1,6 @@
 //Loop over grid patterns
 var loop = new Tone.Sequence(function(time, col) {
-  triggerSynth(synthMatrix, time, col);
+  triggerDrums(drumMatrix, time, col);
   triggerSynth(synthMatrix, time, col);
   triggerBass(bassMatrix, time, col);
   if (col === 15) {

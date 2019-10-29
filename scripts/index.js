@@ -7,7 +7,7 @@ Tone.Transport.bpm.value = 80;
 nx.onload = function() {
     //Set accent and fill colors
     [drumMatrix, drumVol, synthMatrix, synthVol, 
-        bassMatrix, bassVol, start, stop, tempo, save, load, reset, clear].forEach(element => { 
+        bassMatrix, bassVol, start, stop, tempo, save, load, del, clear].forEach(element => { 
         element.colors.accent = "#e33d48",
         element.colors.fill = "#333"
     });
@@ -41,7 +41,7 @@ nx.onload = function() {
     tempo.init();
     save.init();
     load.init();
-    reset.init();
+    del.init();
     clear.init();
 }
 
@@ -61,21 +61,54 @@ document.getElementById('stop').addEventListener('click', function() {
 
 //Save button event listener
 document.getElementById('save').addEventListener('click', function() {
-    const save = {
+    var presetName = prompt("Please enter preset name: ");
+    const preset = {
+        name: presetName,
         drumMatrix: drumMatrix.matrix,
         synthMatrix: synthMatrix.matrix,
         bassMatrix: bassMatrix.matrix
     }
-    window.localStorage['pattern'] = JSON.stringify(save);
+    fetch('/dbInsert', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(preset),
+    })
+    .then(function(response){
+        if(response.ok){
+            console.log('Request success: ', response);
+            return;
+        }
+        throw new Error('Request failed.');
+    })
+    .catch(function(error) {
+        console.log(error);
+    });
 });
 
 //Load button event listener
 document.getElementById('load').addEventListener('click', function() {
-    const save = JSON.parse(window.localStorage['pattern']);
-    drumMatrix.matrix = save.drumMatrix;
-    bassMatrix.matrix = save.bassMatrix;
-    synthMatrix.matrix = save.synthMatrix;
-    [drumMatrix, synthMatrix, bassMatrix].forEach(matrix => matrix.init())
+    var presetName = prompt("Please enter preset name: ");
+    fetch('/dbRead', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: presetName}),
+    })
+    .then(function(response){
+        if(response.ok){
+            response.text().then((s) => {
+                const pattern = JSON.parse(s);
+                drumMatrix.matrix = pattern.Drum;
+                synthMatrix.matrix = pattern.Synth;
+                bassMatrix.matrix = pattern.Bass;
+                [drumMatrix, synthMatrix, bassMatrix].forEach(matrix => matrix.init())
+            });
+            return;
+        }
+        throw new Error('Request failed.');
+    })
+    .catch(function(error) {
+        console.log(error);
+    });
 });
 
 //Clear button event listener to clear grid pattern
@@ -89,8 +122,23 @@ document.getElementById('clear').addEventListener('click', function() {
 
 
 //Reset button event listener to reset local storage memory
-document.getElementById('reset').addEventListener('click', function() {
-    delete localStorage['pattern'];
+document.getElementById('del').addEventListener('click', function() {
+    var presetName = prompt("Please enter preset name: ");
+    fetch('/dbRemove', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: presetName}),
+    })
+    .then(function(response){
+        if(response.ok){
+            console.log('Request success: ', response);
+            return;
+        }
+        throw new Error('Request failed.');
+    })
+    .catch(function(error) {
+        console.log(error);
+    });
 });
 
 //Tempo dial event listener
