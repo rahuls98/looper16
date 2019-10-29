@@ -98,3 +98,4 @@ app.post('/dbRemove', (req, res, next) => {
             client.close();
         }
     });
+});
