@@ -1,3 +1,3 @@
 - Use better sounding synths and drum samples.
 - Adjust CSS to adapt to different screen sizes, window resize, etc.
-- Shift state saving option from browser local storage to better backend option.
+- Add login feature for multiple users using MongoDb
