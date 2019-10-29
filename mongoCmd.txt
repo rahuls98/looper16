@@ -1,0 +1,26 @@
+> use looper16
+> db
+> db.createCollection('presets')
+> show collections
+> db.presets.find()
+> db.presets.find({'Name':'test2'})
+> db.posts.insert({
+        title: 'Post One',
+        body: 'Body of post one',
+        category: 'News',
+        tags: ['news', 'events'],
+        user: {
+            name: 'John Doe',
+            status: 'author'
+        },
+        date: Date()
+    })
+>   var myobj = { 
+        Name: req.body.name, 
+        Drum: req.body.drumMatrix, 
+        Synth: req.body.synthMatrix, 
+        Bass: req.body.bassMatrix
+    };
+    coll.insertOne(myobj)
+> db.presets.remove({})
+> db.collection('presets').deleteOne({'Name':req.body.name});
