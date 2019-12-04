@@ -1,0 +1,122 @@
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>Looper16</title>
+        <link rel="stylesheet" href="CSS/style.css"> 
+        <script type="text/javascript" src="scripts/Tone.js"></script>
+        <script type="text/javascript" src="scripts/nexusUI.js"></script>
+        <script type="text/javascript" src="scripts/interface.js"></script>
+        <script type="text/javascript" src="scripts/drums.js"></script>
+        <script type="text/javascript" src="scripts/synth.js"></script>
+        <script type="text/javascript" src="scripts/bass.js"></script>
+        <script type="text/javascript" src="scripts/loop.js"></script>
+    </head>
+    <body>
+        <section id="heading">
+            <div class="left" id="seqHead">
+                <h1>SEQUENCERS</h1>
+            </div>
+            <div class="right" id="contHead">
+                <h1>CONTROLLERS</h1>
+            </div>
+        </section>
+
+        <div class="left">
+            <div class="legend">
+                <table id="instrument-block">
+                    <tr><td>HiHat</td></tr>
+                    <tr><td>Snare</td></tr>
+                    <tr><td>Kick</td></tr>
+                </table>
+                <table class="keyboard" id="key1">
+                    <tr><td class="norm">C</td></tr>
+                    <tr><td class="norm">B</td></tr>
+                    <tr><td class="flat">Bb</td></tr>
+                    <tr><td class="norm">A</td></tr>
+                    <tr><td class="flat">Ab</td></tr>
+                    <tr><td class="norm">G</td></tr>
+                    <tr><td class="flat">Gb</td></tr>
+                    <tr><td class="norm">F</td></tr>
+                    <tr><td class="norm">E</td></tr>
+                    <tr><td class="flat">Eb</td></tr>
+                    <tr><td class="norm">D</td></tr>
+                    <tr><td class="flat">Db</td></tr>
+                    <tr><td class="norm">C</td></tr>
+                </table>
+                <table class="keyboard" id="key2">
+                    <tr><td class="norm">C</td></tr>
+                    <tr><td class="norm">B</td></tr>
+                    <tr><td class="flat">Bb</td></tr>
+                    <tr><td class="norm">A</td></tr>
+                    <tr><td class="flat">Ab</td></tr>
+                    <tr><td class="norm">G</td></tr>
+                    <tr><td class="flat">Gb</td></tr>
+                    <tr><td class="norm">F</td></tr>
+                    <tr><td class="norm">E</td></tr>
+                    <tr><td class="flat">Eb</td></tr>
+                    <tr><td class="norm">D</td></tr>
+                    <tr><td class="flat">Db</td></tr>
+                    <tr><td class="norm">C</td></tr>
+                </table>
+            </div>
+            <div class="grids">
+                <div><canvas nx="matrix" id="drumMatrix"></canvas></div>
+                <div><canvas nx="matrix" id="synthMatrix"></canvas></div>
+                <div><canvas nx="matrix" id="bassMatrix"></canvas></div>
+            </div>
+        </div>
+
+        <div class="right">
+            <div id="dVol">
+                <canvas nx="multislider" id="drumVol" width="300" height="180"></canvas>
+                <h3>Drum Volume</h3>
+            </div>
+            <div id="keyVol">
+                <div id="sVol">
+                    <canvas nx="dial" id="synthVol" min="-10" max="10"></canvas>
+                    <h3>Synth Volume</h3>
+                </div>
+                <div id="bVol">
+                    <canvas nx="dial" id="bassVol" min="-10" max="10"></canvas>
+                    <h3>Bass Volume</h3>
+                </div>
+            </div>
+            <br>
+            <br>
+            <div id="trackControl">
+                <div id="startBtn">
+                    <canvas nx="button" id="start"></canvas>
+                    <h3>Start</h3>
+                </div>
+                <div id="stopBtn">
+                    <canvas nx="button" id="stop"></canvas>
+                    <h3>Stop</h3>
+                </div>
+                <div id="tempoDial">
+                    <canvas nx="dial" id="tempo" min="80" max="120"></canvas>
+                    <h3>Track Tempo</h3>
+                </div>                
+            </div>
+            <div id="presets">
+                <div id="saveBtn">
+                    <canvas nx="button" id="save"></canvas>
+                    <h3>Save</h3>
+                </div>
+                <div id="loadBtn">
+                    <canvas nx="button" id="load"></canvas>
+                    <h3>Load</h3>
+                </div>
+                <div id="clearBtn">
+                    <canvas nx="button" id="clear"></canvas>
+                    <h3>Clear Grid</h3>
+                </div>
+                <div id="deleteBtn">
+                    <canvas nx="button" id="del"></canvas>
+                    <h3>Delete Preset</h3>
+                </div>
+            </div>
+        </div>
+        <script type="text/javascript" src="scripts/constants.js"></script>
+        <script type="text/javascript" src="scripts/index.js"></script>
+    </body>
+</html>
