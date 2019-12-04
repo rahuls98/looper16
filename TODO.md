@@ -1,3 +1,2 @@
 - Use better sounding synths and drum samples.
 - Adjust CSS to adapt to different screen sizes, window resize, etc.
-- Add login feature for multiple users using MongoDb
